@@ -37,10 +37,12 @@
 
     {# Compact IP blocks #}
     <div class="record-row-ips">
+      {% if r.cfg_cf_enabled %}
       <div class="rip-col">
         <span class="rip-label">Cloudflare</span>
         <span class="rip-value font-mono">{{ r.dns_ip }}</span>
       </div>
+      {% endif %}
       {% if unifi_enabled and (r.unifi_ip or r.cfg_unifi_enabled) %}
       <div class="rip-col">
         <span class="rip-label">UniFi</span>
