@@ -577,9 +577,11 @@ Release order is mandatory:
 1. Update `README.md` for the new version and changes.
 2. Update `shared_templates.py` — `APP_VERSION`.
 3. Update `app.py` — `FastAPI(version=...)`.
-4. Commit.
-5. Create/push git tag.
-6. Build/push GHCR images (`vX.Y.Z` and `latest`).
+4. Commit: `git commit -m "vX.Y.Z — <summary>"`.
+5. Create git tag: `git tag vX.Y.Z`.
+6. Push commit to remote: `git push`.
+7. Push tag to remote: `git push origin vX.Y.Z`.
+8. Build/push GHCR images (`vX.Y.Z` and `latest`).
 
 ---
 
