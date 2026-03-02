@@ -59,7 +59,12 @@
 
     {# Stats #}
     <div class="record-row-stats">
-      {{ r.updates }} update{{ 's' if r.updates != 1 else '' }} &middot;
+      {{ r.updates }} update{{ 's' if r.updates != 1 else '' }}
+      <form hx-post="/reset-updates" hx-target="#records-container" hx-swap="innerHTML" style="display:inline;">
+        <input type="hidden" name="record_name" value="{{ r.name }}">
+        <button type="submit" class="btn-clear-failures" title="Reset update counter">&#x2715;</button>
+      </form>
+      &middot;
       {% if r.failures > 0 %}
         <button type="button" class="btn-failures-toggle"
                 hx-get="/api/logs/record/{{ r.name }}"
@@ -69,10 +74,6 @@
                 title="Click to see error log">
           <span style="color:#dc2626;">{{ r.failures }} failure{{ 's' if r.failures != 1 else '' }}</span> <span style="font-size:0.65rem;">&#9660;</span>
         </button>
-        <form hx-post="/reset-failures" hx-target="#records-container" hx-swap="innerHTML" style="display:inline;">
-          <input type="hidden" name="record_name" value="{{ r.name }}">
-          <button type="submit" class="btn-clear-failures" title="Clear failures">&#x2715;</button>
-        </form>
       {% else %}0 failures{% endif %}
       {% if r.last_checked %}<br><span style="color:#94a3b8;">{{ r.last_checked[:16] }}</span>{% endif %}
     </div>
@@ -81,15 +82,6 @@
     <div class="record-row-btns">
       <button type="button" id="cfg-btn-{{ slug }}" class="btn-icon"
               onclick="toggleRowConfig('{{ slug }}')" title="Configure">&#9881;</button>
-      {% if r.cf_record_id %}
-      <form hx-post="/delete-record" hx-target="#records-container" hx-swap="innerHTML"
-            hx-confirm="Delete {{ r.name }} from Cloudflare AND remove from managed? This cannot be undone."
-            hx-on:htmx:after-request="if(event.detail.successful) location.reload()" style="display:inline">
-        <input type="hidden" name="record_id" value="{{ r.cf_record_id }}">
-        <input type="hidden" name="record_name" value="{{ r.name }}">
-        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-      </form>
-      {% endif %}
       <form hx-post="/remove-from-managed" hx-target="#records-container" hx-swap="innerHTML"
             hx-confirm="Remove {{ r.name }} from managed? DNS record stays in Cloudflare."
             hx-on:htmx:after-request="if(event.detail.successful) location.reload()" style="display:inline">

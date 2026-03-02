@@ -159,6 +159,20 @@ class StatsRepository:
         stats.failures = 0
         return self.save(stats)
 
+    def reset_updates(self, record_name: str) -> RecordStats:
+        """
+        Resets the updates counter to zero for the given record.
+
+        Args:
+            record_name: The fully-qualified DNS name whose updates counter to clear.
+
+        Returns:
+            The updated RecordStats instance.
+        """
+        stats = self.get_or_create(record_name)
+        stats.updates = 0
+        return self.save(stats)
+
     def delete_by_name(self, record_name: str) -> bool:
         """
         Deletes the RecordStats row for the given FQDN if it exists.

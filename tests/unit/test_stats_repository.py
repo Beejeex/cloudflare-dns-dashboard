@@ -64,6 +64,17 @@ def test_record_failure_increments_counter(db_session):
     assert stats.failures == 1
 
 
+def test_reset_updates_zeroes_counter(db_session):
+    """reset_updates must set the updates counter back to zero."""
+    repo = StatsRepository(db_session)
+    repo.record_update(_RECORD)
+    repo.record_update(_RECORD)
+    assert repo.get_by_name(_RECORD).updates == 2
+
+    stats = repo.reset_updates(_RECORD)
+    assert stats.updates == 0
+
+
 def test_delete_by_name_removes_row(db_session):
     """delete_by_name must remove the row and return True."""
     repo = StatsRepository(db_session)

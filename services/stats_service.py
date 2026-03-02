@@ -113,6 +113,19 @@ class StatsService:
         logger.info("Stats: failures reset for %s.", record_name)
         return self._repo.reset_failures(record_name)
 
+    async def reset_updates(self, record_name: str) -> RecordStats:
+        """
+        Resets the updates counter to zero for the given DNS record.
+
+        Args:
+            record_name: The fully-qualified DNS name whose updates counter to clear.
+
+        Returns:
+            The updated RecordStats instance.
+        """
+        logger.info("Stats: updates reset for %s.", record_name)
+        return self._repo.reset_updates(record_name)
+
     async def delete_for_record(self, record_name: str) -> bool:
         """
         Deletes the stats row for the given DNS record.

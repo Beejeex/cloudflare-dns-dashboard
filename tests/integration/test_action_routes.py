@@ -103,3 +103,29 @@ def test_clear_logs_returns_html_fragment(db_session):
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
+
+
+# ---------------------------------------------------------------------------
+# POST /reset-updates
+# ---------------------------------------------------------------------------
+
+
+def test_reset_updates_zeroes_counter(db_session):
+    """POST /reset-updates must reset the updates counter to zero and return HTML."""
+    repo = StatsRepository(db_session)
+    repo.record_update("home.example.com")
+    repo.record_update("home.example.com")
+    config_repo = ConfigRepository(db_session)
+    config = config_repo.load()
+    config_repo.set_records(config, ["home.example.com"])
+    config_repo.save(config)
+
+    _apply_overrides(db_session)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post("/reset-updates", data={"record_name": "home.example.com"})
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    stats = repo.get_by_name("home.example.com")
+    assert stats.updates == 0

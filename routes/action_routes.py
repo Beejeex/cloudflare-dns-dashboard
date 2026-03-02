@@ -326,8 +326,8 @@ async def delete_record(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/reset-failures", response_class=HTMLResponse)
-async def reset_failures(
+@router.post("/reset-updates", response_class=HTMLResponse)
+async def reset_updates(
     request: Request,
     record_name: str = Form(...),
     config_service: ConfigService = Depends(get_config_service),
@@ -335,22 +335,22 @@ async def reset_failures(
     record_config_repo: RecordConfigRepository = Depends(get_record_config_repo),
 ) -> HTMLResponse:
     """
-    Resets the failure counter to zero for the given record.
+    Resets the updates counter to zero for the given record.
 
     Returns the updated records-table partial so HTMX can swap it in.
 
     Args:
         request: The incoming FastAPI request.
-        record_name: The FQDN whose failure counter to reset.
+        record_name: The FQDN whose updates counter to reset.
         config_service: Provides the current managed records list.
-        stats_service: Resets failures and provides stats for the table.
+        stats_service: Resets updates and provides stats for the table.
         record_config_repo: Provides per-record config for the table.
 
     Returns:
         An HTMLResponse containing the records-table partial fragment.
     """
-    await stats_service.reset_failures(record_name)
-    logger.info("Failures reset for %s.", record_name)
+    await stats_service.reset_updates(record_name)
+    logger.info("Updates reset for %s.", record_name)
 
     records = await config_service.get_managed_records()
     all_stats = await stats_service.get_all()
