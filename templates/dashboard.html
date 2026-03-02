@@ -13,16 +13,6 @@
     <div class="stat-value"><span id="stat-managed">{{ records | length }}</span></div>
   </div>
   <div class="stat-card">
-    <div class="stat-label">Total Updates</div>
-    <div class="stat-value"><span id="stat-updates">{{ records | sum(attribute='updates') }}</span></div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">Total Failures</div>
-    <div class="stat-value">
-      <span id="stat-failures" style="color: {% if records | sum(attribute='failures') > 0 %}#dc2626{% else %}#1e293b{% endif %};">{{ records | sum(attribute='failures') }}</span>
-    </div>
-  </div>
-  <div class="stat-card">
     <div class="stat-label">Check Interval</div>
     <div class="stat-value" style="font-size:1.5rem;">{{ interval }}s</div>
   </div>

@@ -175,3 +175,95 @@ async def test_run_check_cycle_skips_record_with_no_zone(db_session):
     )
 
     provider.get_record.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Recovery — failure counter auto-resets after a successful check
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_check_cycle_resets_failures_on_unchanged_recovery(db_session):
+    """
+    When a record has prior failures and the next check is 'unchanged',
+    the failure counter must be automatically reset to zero.
+    """
+    from repositories.stats_repository import StatsRepository
+
+    # Seed an existing failure for the record
+    repo = StatsRepository(db_session)
+    repo.record_failure("home.example.com")
+    repo.record_failure("home.example.com")
+    stats_before = repo.get_by_name("home.example.com")
+    assert stats_before.failures == 2
+
+    # DNS IP now matches public IP → "unchanged" (recovery)
+    ip_service = AsyncMock()
+    ip_service.get_public_ip.return_value = "1.2.3.4"
+    provider = AsyncMock()
+    provider.get_record.return_value = _mock_record(content="1.2.3.4")
+
+    service = _make_dns_service(db_session, provider, ip_service)
+    await service.run_check_cycle(
+        managed_records=["home.example.com"],
+        zones={"example.com": "zone123"},
+    )
+
+    stats_after = repo.get_by_name("home.example.com")
+    assert stats_after.failures == 0
+
+
+@pytest.mark.asyncio
+async def test_run_check_cycle_resets_failures_on_updated_recovery(db_session):
+    """
+    When a record has prior failures and the next check performs an update,
+    the failure counter must be automatically reset to zero.
+    """
+    from repositories.stats_repository import StatsRepository
+
+    # Seed three failures
+    repo = StatsRepository(db_session)
+    repo.record_failure("home.example.com")
+    repo.record_failure("home.example.com")
+    repo.record_failure("home.example.com")
+
+    # DNS IP differs from public IP → update performed (recovery)
+    ip_service = AsyncMock()
+    ip_service.get_public_ip.return_value = "9.9.9.9"
+    provider = AsyncMock()
+    provider.get_record.return_value = _mock_record(content="1.2.3.4")
+    provider.update_record.return_value = _mock_record(content="9.9.9.9")
+
+    service = _make_dns_service(db_session, provider, ip_service)
+    await service.run_check_cycle(
+        managed_records=["home.example.com"],
+        zones={"example.com": "zone123"},
+    )
+
+    stats_after = repo.get_by_name("home.example.com")
+    assert stats_after.failures == 0
+
+
+@pytest.mark.asyncio
+async def test_run_check_cycle_no_reset_when_no_prior_failures(db_session):
+    """
+    When a record has no prior failures, a successful check leaves the
+    failure counter at zero (no spurious reset_failures call needed).
+    """
+    from repositories.stats_repository import StatsRepository
+
+    ip_service = AsyncMock()
+    ip_service.get_public_ip.return_value = "1.2.3.4"
+    provider = AsyncMock()
+    provider.get_record.return_value = _mock_record(content="1.2.3.4")
+
+    service = _make_dns_service(db_session, provider, ip_service)
+    await service.run_check_cycle(
+        managed_records=["home.example.com"],
+        zones={"example.com": "zone123"},
+    )
+
+    repo = StatsRepository(db_session)
+    stats = repo.get_by_name("home.example.com")
+    # May be None if stats row was never created (no failures, just a check)
+    assert stats is None or stats.failures == 0

@@ -283,7 +283,9 @@ class DnsService:
         Checks a single DNS record and updates it if the IP has changed.
 
         All outcomes (up-to-date, updated, failed) are recorded in stats
-        and the log service.
+        and the log service. If the record had prior failures and the current
+        check succeeds, the failure counter is automatically reset to zero
+        and a recovery entry is written to the activity log.
 
         Args:
             record_name: The FQDN to check.
@@ -306,6 +308,11 @@ class DnsService:
             return "failed"
 
         try:
+            # NOTE: Snapshot the failure count BEFORE the check so we can detect
+            # recovery (failures > 0 → next successful outcome).
+            prior_stats = await self._stats.get_for_record(record_name)
+            prior_failures = prior_stats.failures if prior_stats is not None else 0
+
             dns_record = await self._provider.get_record(zone_id, record_name)
             await self._stats.record_checked(record_name)
 
@@ -317,6 +324,14 @@ class DnsService:
             if dns_record.content == target_ip:
                 logger.debug("%s is already up to date (%s).", record_name, target_ip)
                 self._log.log(f"Cloudflare: {record_name} already up to date ({target_ip}).", level="INFO")
+                # Auto-reset failures on recovery after previous failures.
+                if prior_failures > 0:
+                    await self._stats.reset_failures(record_name)
+                    self._log.log(
+                        f"Cloudflare: {record_name} recovered — {prior_failures} failure(s) cleared.",
+                        level="INFO",
+                    )
+                    logger.info("Recovery: %s failure count reset after %d prior failure(s).", record_name, prior_failures)
                 return "unchanged"
 
             # IP mismatch — update the record
@@ -330,6 +345,14 @@ class DnsService:
                 level="INFO",
             )
             await self._stats.record_updated(record_name)
+            # Auto-reset failures on recovery after previous failures.
+            if prior_failures > 0:
+                await self._stats.reset_failures(record_name)
+                self._log.log(
+                    f"Cloudflare: {record_name} recovered — {prior_failures} failure(s) cleared.",
+                    level="INFO",
+                )
+                logger.info("Recovery: %s failure count reset after %d prior failure(s).", record_name, prior_failures)
             return "updated"
 
         except DnsProviderError as exc:
