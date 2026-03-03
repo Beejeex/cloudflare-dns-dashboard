@@ -206,7 +206,7 @@ Images are published to GitHub Container Registry:
 
 ```
 ghcr.io/beejeex/cloudflare-dns-dashboard:latest      # most recent release
-ghcr.io/beejeex/cloudflare-dns-dashboard:v2.0.21     # pinned release
+ghcr.io/beejeex/cloudflare-dns-dashboard:v2.0.22     # pinned release
 ```
 
 ---
@@ -218,13 +218,14 @@ ghcr.io/beejeex/cloudflare-dns-dashboard:v2.0.21     # pinned release
 | `v1.x` | Legacy Flask app — archived |
 | `v2.0.13` | FastAPI rewrite with UniFi + Kubernetes integration |
 | `v2.0.14` | Managed records redesigned as full-width rows with expandable config panel |
-| `v2.0.15` | Fix UniFi .local policy name to preserve full subdomain (e.g. `profilarr.hidden-hive.local`) |
+| `v2.0.15` | Fix UniFi .local policy name to preserve full subdomain structure |
 | `v2.0.16` | Fixed badge column alignment; added per-record clear-failures button |
 | `v2.0.17` | Dashboard live-refresh every 30s (records table + stat cards) without full page reload |
 | `v2.0.18` | UniFi-only records now stamp last_checked timestamp on each sync cycle |
 | `v2.0.19` | Auto-reset failure counter on recovery; removed Total Updates/Failures stat cards |
 | `v2.0.20` | Hide Cloudflare IP column for records that have Cloudflare disabled |
-| `v2.0.21` | **Current** — Reset button moved to updates counter; failures show count-only (auto-reset on recovery) |
+| `v2.0.21` | Reset button moved to updates counter; failures show count-only (auto-reset on recovery) |
+| `v2.0.22` | **Current** — Remove private domain name from public source code |
 
 This is **beta software**. The database schema may change between minor versions. Pin to a specific image tag in production.
 

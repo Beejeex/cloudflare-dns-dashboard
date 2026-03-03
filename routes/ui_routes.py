@@ -43,10 +43,10 @@ def _to_local_policy_name(record_name: str) -> str:  # noqa: keep in sync with s
     intermediate labels so the full subdomain structure is retained.
 
     Args:
-        record_name: Managed FQDN, e.g. "profilarr.hidden-hive.net".
+        record_name: Managed FQDN, e.g. "home.example.net".
 
     Returns:
-        Local DNS name, e.g. "profilarr.hidden-hive.local".
+        Local DNS name, e.g. "home.example.local".
     """
     name = record_name.strip()
     if name.endswith(".local"):
