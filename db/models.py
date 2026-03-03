@@ -100,7 +100,7 @@ class RecordConfig(SQLModel, table=True):
     Stores per-record DDNS behaviour settings.
 
     One optional row per managed FQDN. When no row exists the application
-    uses sensible defaults (Cloudflare enabled, dynamic IP mode, UniFi off).
+    uses sensible defaults (all integrations disabled; dynamic IP mode).
 
     Collaborators:
         - RecordConfigRepository: reads and writes these rows
@@ -113,7 +113,7 @@ class RecordConfig(SQLModel, table=True):
     record_name: str = Field(unique=True, index=True)
 
     # Whether Cloudflare DDNS updates are active for this record
-    cf_enabled: bool = Field(default=True)
+    cf_enabled: bool = Field(default=False)
 
     # "dynamic" — always use the current public IP detected by IpService
     # "static"  — always use static_ip, never auto-update
