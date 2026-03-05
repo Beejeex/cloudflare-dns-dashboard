@@ -269,15 +269,29 @@ async def dashboard(
                 parent_entry["unifi_local_record_id"] = local_entry["unifi_local_record_id"]
             local_names_to_remove.append(name)
         else:
-            # No parent found anywhere — rename this entry to the stripped name
-            # so + Manage adds the parent record, not a .local FQDN. Mark it
-            # local_only=True so the route can auto-enable unifi_local_enabled.
+            # No parent found anywhere — rename this entry to the reconstructed
+            # FQDN (matching against configured zones) so + Manage adds the
+            # correct record name (e.g. "longhorn.batenryck.net" instead of
+            # the bare prefix "longhorn.batenryck"). Mark local_only=True so
+            # the route auto-enables unifi_local_enabled on the new record.
+            #
+            # Zone match: for zone "batenryck.net" split into sld="batenryck"
+            # and tld="net". If prefix ends with ".batenryck" the full FQDN
+            # is reconstructed as prefix + "." + tld.
+            reconstructed = prefix  # fallback: leave as-is when no zone matches
+            for zone_domain in zones:
+                parts = zone_domain.rsplit(".", 1)
+                if len(parts) == 2:
+                    sld, tld = parts
+                    if prefix.endswith("." + sld) or prefix == sld:
+                        reconstructed = prefix + "." + tld
+                        break
             local_entry = discovery_map.pop(name)
-            stripped_entry = _entry(prefix)
+            stripped_entry = _entry(reconstructed)
             stripped_entry["unifi_local_ip"] = local_entry["unifi_local_ip"]
             stripped_entry["unifi_local_record_id"] = local_entry["unifi_local_record_id"]
             stripped_entry["local_only"] = True
-            discovery_map[prefix] = stripped_entry
+            discovery_map[reconstructed] = stripped_entry
 
     for name in local_names_to_remove:
         del discovery_map[name]

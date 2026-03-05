@@ -370,3 +370,24 @@ def reschedule(scheduler: AsyncIOScheduler, http_client: httpx.AsyncClient, inte
         seconds=interval_seconds,
     )
     logger.info("DDNS check job rescheduled — new interval: %ds.", interval_seconds)
+
+
+async def run_ddns_check_now(
+    http_client: httpx.AsyncClient,
+    unifi_http_client: httpx.AsyncClient,
+) -> None:
+    """
+    Runs one DDNS check cycle immediately, outside the normal schedule.
+
+    Intended for the manual "Sync Now" UI trigger. Delegates entirely to
+    _ddns_check_job so behaviour is identical to a scheduled run.
+
+    Args:
+        http_client: The shared httpx.AsyncClient from app.state.
+        unifi_http_client: The UniFi-specific client from app.state.
+
+    Returns:
+        None
+    """
+    logger.info("Manual sync triggered via UI.")
+    await _ddns_check_job(http_client=http_client, unifi_http_client=unifi_http_client)

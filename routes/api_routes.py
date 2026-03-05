@@ -2,9 +2,9 @@
 routes/api_routes.py
 
 Responsibility: JSON and HTMX partial API endpoints consumed by the frontend
-for live polling (log tail, IP status, records refresh). These are lightweight
-read-only endpoints.
-Does NOT: mutate state, render full pages, or perform DNS updates.
+for live polling (log tail, IP status, records refresh) and manual actions
+such as triggering an immediate sync cycle.
+Does NOT: render full pages or manage DB sessions directly.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from dependencies import (
 )
 from exceptions import DnsProviderError, IpFetchError, UnifiProviderError
 from repositories.record_config_repository import RecordConfigRepository
+from scheduler import run_ddns_check_now
 from services.config_service import ConfigService
 from services.dns_service import DnsService
 from services.log_service import LogService
@@ -36,6 +37,34 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
 from shared_templates import templates  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# Manual sync trigger
+# ---------------------------------------------------------------------------
+
+
+@router.post("/trigger-sync", response_class=HTMLResponse)
+async def trigger_sync(request: Request) -> HTMLResponse:
+    """
+    Runs one full DDNS + UniFi sync cycle immediately on demand.
+
+    Pulls the shared HTTP clients from app.state so the job uses the same
+    connections as the scheduler. Returns an HTMX-friendly indicator that
+    is swapped into the button area and triggers a page reload on completion.
+
+    Args:
+        request: The incoming FastAPI request (used to access app.state).
+
+    Returns:
+        An HTMLResponse confirming the sync was triggered.
+    """
+    await run_ddns_check_now(
+        http_client=request.app.state.http_client,
+        unifi_http_client=request.app.state.unifi_http_client,
+    )
+    # Empty body — the HTMX after-request handler triggers location.reload()
+    return HTMLResponse(content="", status_code=200)
 
 
 @router.get("/logs/recent", response_class=HTMLResponse)
