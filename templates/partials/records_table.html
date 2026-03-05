@@ -39,20 +39,27 @@
     <div class="record-row-ips">
       {% if r.cfg_cf_enabled %}
       <div class="rip-col">
-        <span class="rip-label">Cloudflare</span>
+        <span class="rip-label rip-label-cf">Cloudflare</span>
         <span class="rip-value font-mono">{{ r.dns_ip }}</span>
       </div>
       {% endif %}
       {% if unifi_enabled and (r.unifi_ip or r.cfg_unifi_enabled) %}
       <div class="rip-col">
-        <span class="rip-label">UniFi</span>
+        <span class="rip-label rip-label-unifi">UniFi</span>
         <span class="rip-value font-mono">{{ r.unifi_ip or '—' }}</span>
       </div>
       {% endif %}
       {% if unifi_enabled and (r.unifi_local_ip or r.cfg_unifi_local_enabled) %}
       <div class="rip-col">
-        <span class="rip-label">UniFi .local</span>
+        <span class="rip-label rip-label-unifi">UniFi .local</span>
         <span class="rip-value font-mono">{{ r.unifi_local_ip or '—' }}</span>
+      </div>
+      {% endif %}
+      {% if r.k8s_namespace %}
+      <div class="rip-col">
+        <span class="rip-label rip-label-k8s">K8s Ingress</span>
+        <span class="rip-value" title="{{ r.k8s_ingress_name }} / {{ r.k8s_namespace }}"
+              style="font-size:0.775rem; color:#475569;">{{ r.k8s_namespace }}/{{ r.k8s_ingress_name }}</span>
       </div>
       {% endif %}
     </div>

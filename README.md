@@ -206,7 +206,7 @@ Images are published to GitHub Container Registry:
 
 ```
 ghcr.io/beejeex/cloudflare-dns-dashboard:latest      # most recent release
-ghcr.io/beejeex/cloudflare-dns-dashboard:v2.0.25     # pinned release
+ghcr.io/beejeex/cloudflare-dns-dashboard:v2.0.26     # pinned release
 ```
 
 ---
@@ -225,7 +225,11 @@ ghcr.io/beejeex/cloudflare-dns-dashboard:v2.0.25     # pinned release
 | `v2.0.19` | Auto-reset failure counter on recovery; removed Total Updates/Failures stat cards |
 | `v2.0.20` | Hide Cloudflare IP column for records that have Cloudflare disabled |
 | `v2.0.21` | Reset button moved to updates counter; failures show count-only (auto-reset on recovery) |
-| `v2.0.22` | **Current** — Remove private domain name from public source code |
+| `v2.0.22` | Remove private domain name from public source code |
+| `v2.0.23` | New managed records default all checkboxes off |
+| `v2.0.24` | UniFi .local discovery merge fix; delete buttons on unmanaged cards; 3-checkbox UniFi panel |
+| `v2.0.25` | Sync Now button; zone-based FQDN reconstruction for orphaned .local policies |
+| `v2.0.26` | **Current** — Color-coded rip-labels per service; K8s Ingress shown in managed record rows |
 
 This is **beta software**. The database schema may change between minor versions. Pin to a specific image tag in production.
 

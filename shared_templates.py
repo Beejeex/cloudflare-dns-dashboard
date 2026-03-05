@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 # Application version — update here on every release
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "v2.0.25"
+APP_VERSION = "v2.0.26"
 
 # ---------------------------------------------------------------------------
 # Shared templates instance — import this in all route files instead of

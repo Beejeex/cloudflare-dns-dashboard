@@ -128,6 +128,18 @@ async def dashboard(
             logger.warning("UniFi DNS policy fetch failed: %s", exc)
             unifi_error = str(exc)
 
+    # Discover hostnames from Kubernetes Ingress resources before the managed loop
+    # so per-record entries can include k8s_namespace / k8s_ingress_name.
+    k8s_records: list = []
+    k8s_error: str | None = None
+    if kubernetes_service.is_enabled():
+        try:
+            k8s_records = await kubernetes_service.list_ingress_records()
+        except KubernetesError as exc:
+            logger.warning("Kubernetes ingress discovery failed: %s", exc)
+            k8s_error = str(exc)
+    k8s_by_hostname = {r.hostname: r for r in k8s_records}
+
     for record_name in managed_records:
         dns_record = None
         try:
@@ -173,17 +185,10 @@ async def dashboard(
             "cfg_unifi_static_ip": rc.unifi_static_ip if rc else "",
             "cfg_unifi_local_enabled": rc.unifi_local_enabled if rc else False,
             "cfg_unifi_local_static_ip": rc.unifi_local_static_ip if rc else "",
+            # K8s ingress — populated when a matching Ingress hostname is found
+            "k8s_namespace": k8s_by_hostname[record_name].namespace if record_name in k8s_by_hostname else None,
+            "k8s_ingress_name": k8s_by_hostname[record_name].ingress_name if record_name in k8s_by_hostname else None,
         })
-
-    # Discover hostnames from Kubernetes Ingress resources (optional feature)
-    k8s_records: list = []
-    k8s_error: str | None = None
-    if kubernetes_service.is_enabled():
-        try:
-            k8s_records = await kubernetes_service.list_ingress_records()
-        except KubernetesError as exc:
-            logger.warning("Kubernetes ingress discovery failed: %s", exc)
-            k8s_error = str(exc)
 
     # Fetch all A-records in the zone for the discovery panel
     zone_records: list = []
