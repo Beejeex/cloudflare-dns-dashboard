@@ -102,7 +102,7 @@
     <form hx-post="/create-record"
           hx-target="#create-record-status"
           hx-swap="innerHTML"
-          hx-on:htmx:after-request="if(event.detail.successful && !this.querySelector('.alert-error')) { this.reset(); location.reload(); }"
+          hx-on:htmx:after-request="if(event.detail.successful && !document.getElementById('create-record-status').querySelector('.alert-error')) { this.reset(); location.reload(); }"
           style="display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap;">
       <div class="form-group" style="flex:2; min-width:180px; margin-bottom:0;">
         <label for="create-record-name">Record Name (FQDN)</label>
@@ -125,11 +125,26 @@
    Available Records — compact card grid
 ------------------------------------------------------------------------- #}
 <div class="card mb-2">
-  <div class="card-header">
+  <div class="card-header" style="flex-wrap:wrap; gap:0.5rem;">
     <span class="card-title">Available Records</span>
-    <span style="font-size:0.75rem; color:#64748b;">
+    <span id="discovery-count" style="font-size:0.75rem; color:#64748b;">
       {{ discovery_records | length }} record{{ 's' if discovery_records | length != 1 else '' }}
     </span>
+    {# Search + source filter — purely client-side, zero network calls #}
+    <div style="display:flex; align-items:center; gap:0.5rem; margin-left:auto; flex-wrap:wrap;">
+      <input id="discovery-search" type="search" placeholder="Search records…"
+             oninput="filterDiscovery()"
+             style="font-size:0.8125rem; padding:0.3rem 0.65rem; border:1px solid #cbd5e1;
+                    border-radius:0.375rem; width:190px; outline:none;">
+      <div style="display:flex; gap:0.25rem;">
+        <button class="disc-filter-btn active" data-filter="all"   onclick="setDiscoveryFilter('all',   this)">All</button>
+        <button class="disc-filter-btn"        data-filter="cf"    onclick="setDiscoveryFilter('cf',    this)">CF</button>
+        <button class="disc-filter-btn"        data-filter="unifi" onclick="setDiscoveryFilter('unifi', this)">UniFi</button>
+        <button class="disc-filter-btn"        data-filter="k8s"   onclick="setDiscoveryFilter('k8s',   this)">K8s</button>
+        <button class="disc-filter-btn"        data-filter="managed"   onclick="setDiscoveryFilter('managed',   this)">Managed</button>
+        <button class="disc-filter-btn"        data-filter="unmanaged" onclick="setDiscoveryFilter('unmanaged', this)">Unmanaged</button>
+      </div>
+    </div>
   </div>
 
   {# Error banners #}
@@ -147,7 +162,15 @@
   {% if discovery_records %}
   <div class="discovery-grid">
     {% for r in discovery_records %}
-    <div class="discovery-card{% if r.name in managed_names %} discovery-card-managed{% endif %}">
+    {%- set src_classes = '' %}
+    {%- set srcs = [] %}
+    {%- if r.cf_ip is not none    %}{%- set srcs = srcs + ['cf']    %}{%- endif %}
+    {%- if r.unifi_ip is not none or r.unifi_local_ip is not none %}{%- set srcs = srcs + ['unifi'] %}{%- endif %}
+    {%- if r.k8s_namespace is not none %}{%- set srcs = srcs + ['k8s']   %}{%- endif %}
+    <div class="discovery-card{% if r.name in managed_names %} discovery-card-managed{% endif %}"
+         data-name="{{ r.name | lower }}"
+         data-sources="{{ srcs | join(' ') }}"
+         data-managed="{{ 'managed' if r.name in managed_names else 'unmanaged' }}">
       {# Source badges row #}
       <div class="discovery-card-top">
         {% if r.cf_ip is not none %}
@@ -306,6 +329,40 @@ function toggleUnifiLocal(slug, enabled) {
     var master = document.getElementById('unifi-master-' + slug);
     if (master) master.checked = true;
   }
+}
+
+// ── Discovery search + filter ──────────────────────────────────────────────
+var _discFilter = 'all';
+
+function filterDiscovery() {
+  var query  = (document.getElementById('discovery-search').value || '').toLowerCase().trim();
+  var cards  = document.querySelectorAll('.discovery-card');
+  var visible = 0;
+  cards.forEach(function(card) {
+    var name    = (card.dataset.name    || '').toLowerCase();
+    var sources = (card.dataset.sources || '').toLowerCase();
+    var managed = (card.dataset.managed || '').toLowerCase();
+    var matchSearch = !query || name.indexOf(query) !== -1;
+    var matchFilter = _discFilter === 'all'
+      || (_discFilter === 'managed'   && managed === 'managed')
+      || (_discFilter === 'unmanaged' && managed === 'unmanaged')
+      || sources.indexOf(_discFilter) !== -1;
+    var show = matchSearch && matchFilter;
+    card.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  var countEl = document.getElementById('discovery-count');
+  if (countEl) {
+    countEl.textContent = visible + ' record' + (visible !== 1 ? 's' : '');
+  }
+}
+
+function setDiscoveryFilter(filter, btn) {
+  _discFilter = filter;
+  document.querySelectorAll('.disc-filter-btn').forEach(function(b) {
+    b.classList.toggle('active', b === btn);
+  });
+  filterDiscovery();
 }
 
 (function () {

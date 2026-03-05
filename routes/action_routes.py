@@ -554,8 +554,10 @@ async def create_record(
     """
     Creates a new Cloudflare A-record and adds it to the managed list.
 
-    HTMX receives the response; the caller triggers a full page reload
-    via hx-on:htmx:after-request so both tables refresh.
+    On success, returns the records-table partial and the caller triggers
+    a full page reload via hx-on:htmx:after-request.
+    On failure, returns a minimal error fragment with class ``alert-error``
+    so the caller can display it without clobbering the managed records table.
 
     Args:
         request: The incoming FastAPI request.
@@ -567,8 +569,8 @@ async def create_record(
         log_service: Writes a UI log entry on success or failure.
 
     Returns:
-        An HTMLResponse containing the records-table partial fragment,
-        with an error message on failure.
+        An HTMLResponse with the records-table partial on success, or a
+        plain error div fragment on failure.
     """
     zones = await config_service.get_zones()
     error_message = None
@@ -581,7 +583,18 @@ async def create_record(
         error_message = str(exc)
         log_service.log(f"Failed to create {record_name}: {exc}", level="ERROR")
         logger.error("create-record failed for %s: %s", record_name, exc)
-
+        # NOTE: Return a minimal error fragment so the caller can display it
+        # without clobbering the records table. The hx-target is the status div,
+        # not #records-container, so we must not dump the full table there on failure.
+        return HTMLResponse(
+            content=(
+                f'<div class="alert-error" style="background:#fee2e2; color:#991b1b;'
+                f' border:1px solid #fca5a5; padding:0.65rem 1rem;'
+                f' border-radius:0.375rem; font-size:0.875rem;">'
+                f'&#9888; {error_message}</div>'
+            ),
+            status_code=200,
+        )
     records = await config_service.get_managed_records()
     all_stats = await stats_service.get_all()
     stats_by_name = {s.record_name: s for s in all_stats}

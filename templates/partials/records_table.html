@@ -18,19 +18,21 @@
       <span class="record-name font-mono">{{ r.name }}</span>
     </div>
 
-    {# Status badge — fixed-width column so it always aligns regardless of name length #}
+    {# Status badges — one per active service, so CF + UniFi both show when both enabled #}
     <div class="record-row-badge">
       {% if r.cfg_cf_enabled %}
         {% if r.is_up_to_date is none %}<span class="badge badge-neutral">Unknown</span>
         {% elif r.is_up_to_date %}<span class="badge badge-ok">&#10003; CF synced</span>
         {% else %}<span class="badge badge-warning">&#8593; CF pending</span>{% endif %}
-      {% elif r.cfg_unifi_enabled or r.cfg_unifi_local_enabled %}
+      {% endif %}
+      {% if r.cfg_unifi_enabled or r.cfg_unifi_local_enabled %}
         {%- set unifi_target = r.cfg_unifi_static_ip or unifi_default_ip or '' -%}
         {% if r.unifi_ip and r.unifi_ip == unifi_target %}
           <span class="badge" style="background:#ede9fe;color:#6d28d9;">&#10003; UniFi synced</span>
         {% elif r.unifi_ip %}<span class="badge badge-warning">UniFi out of sync</span>
         {% else %}<span class="badge badge-neutral">UniFi pending</span>{% endif %}
-      {% else %}
+      {% endif %}
+      {% if not r.cfg_cf_enabled and not r.cfg_unifi_enabled and not r.cfg_unifi_local_enabled %}
         <span class="badge badge-neutral" style="color:#94a3b8;">Inactive</span>
       {% endif %}
     </div>

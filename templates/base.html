@@ -303,9 +303,13 @@
       word-break: break-all;
     }
     .record-row-badge {
-      flex: 0 0 130px;
+      flex: 0 0 auto;
+      min-width: 120px;
+      max-width: 220px;
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
+      gap: 0.25rem;
     }
     .record-row-ips {
       display: flex;
@@ -335,6 +339,26 @@
     .rip-label-cf    { color: #0369a1; } /* sky-700 — matches .badge-cf */
     .rip-label-unifi { color: #7c3aed; } /* violet-700 — matches .badge-unifi */
     .rip-label-k8s   { color: #15803d; } /* green-700 — matches .badge-k8s */
+
+    /* ---- Discovery search / filter bar ---- */
+    .disc-filter-btn {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.25rem 0.6rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      background: #f8fafc;
+      color: #64748b;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+    }
+    .disc-filter-btn:hover { background: #e2e8f0; }
+    .disc-filter-btn.active { background: #0284c7; color: #fff; border-color: #0284c7; }
+    .disc-filter-btn[data-filter="cf"].active    { background: #0369a1; border-color: #0369a1; }
+    .disc-filter-btn[data-filter="unifi"].active { background: #7c3aed; border-color: #7c3aed; }
+    .disc-filter-btn[data-filter="k8s"].active   { background: #15803d; border-color: #15803d; }
+    .disc-filter-btn[data-filter="managed"].active   { background: #16a34a; border-color: #16a34a; }
+    .disc-filter-btn[data-filter="unmanaged"].active { background: #f59e0b; border-color: #f59e0b; color:#1e293b; }
     .rip-value {
       font-size: 0.8375rem;
       color: #334155;
