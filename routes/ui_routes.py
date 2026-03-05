@@ -95,11 +95,6 @@ async def dashboard(
         for name in managed_records
         if _to_local_policy_name(name) != name
     }
-    local_companion_names = {
-        _to_local_policy_name(name)
-        for name in managed_records
-        if _to_local_policy_name(name) != name
-    }
 
     # Load all per-record settings up front in one query
     record_configs = record_config_repo.get_all(managed_records)
@@ -211,31 +206,81 @@ async def dashboard(
             "unifi_ip": None, "unifi_record_id": None,
             "unifi_local_ip": None, "unifi_local_record_id": None,
             "k8s_namespace": None, "k8s_ingress_name": None,
+            "local_only": False,
         }
 
+    # Pass 1: Add all sources into discovery_map without .local merging yet.
+    # UniFi .local policies store into unifi_local_* on their own provisional entry
+    # so that pass 2 can find them regardless of which source provided the parent.
     for r in zone_records:
         e = discovery_map.setdefault(r.name, _entry(r.name))
         e["cf_ip"] = r.content
         e["cf_record_id"] = r.id
 
-    # Merge UniFi policies when UniFi is enabled
     for name, policy in unifi_policy_map.items():
-        # NOTE: Companion *.local policies are displayed on their parent
-        # hostname card instead of as separate discovery cards.
-        parent_name = local_parent_by_name.get(name)
-        if parent_name:
-            e = discovery_map.setdefault(parent_name, _entry(parent_name))
+        e = discovery_map.setdefault(name, _entry(name))
+        if name.endswith(".local"):
+            # Store local data on this provisional entry; pass 2 will merge it
+            # into the non-.local parent once all sources are loaded.
             e["unifi_local_ip"] = policy.content
             e["unifi_local_record_id"] = policy.id
-            continue
-        e = discovery_map.setdefault(name, _entry(name))
-        e["unifi_ip"] = policy.content
-        e["unifi_record_id"] = policy.id
+        else:
+            e["unifi_ip"] = policy.content
+            e["unifi_record_id"] = policy.id
 
     for r in k8s_records:
         e = discovery_map.setdefault(r.hostname, _entry(r.hostname))
         e["k8s_namespace"] = r.namespace
         e["k8s_ingress_name"] = r.ingress_name
+
+    # Pass 2: Merge standalone *.local entries into their non-.local parent card.
+    # A parent is found by:
+    #   1. The explicit managed-record mapping (local_parent_by_name), or
+    #   2. Any existing discovery entry whose name shares the same subdomain
+    #      prefix (everything before the last dot) and is not itself .local.
+    # This handles the case where the parent is discovered only via K8s or CF
+    # and is therefore absent from local_parent_by_name.
+    # When NO parent exists at all (truly orphaned .local policy), the entry is
+    # renamed to the stripped parent name so the + Manage button adds the right
+    # record, and is tagged local_only=True so the template can hint the route
+    # to auto-enable unifi_local_enabled.
+    local_names_to_remove: list[str] = []
+    for name in list(discovery_map.keys()):
+        if not name.endswith(".local"):
+            continue
+        prefix = name[: -len(".local")]  # e.g. "headlamp.batenryck"
+        parent_name: str | None = local_parent_by_name.get(name)
+        if not parent_name:
+            for existing in discovery_map:
+                if (
+                    existing != name
+                    and not existing.endswith(".local")
+                    and existing.startswith(prefix + ".")
+                ):
+                    parent_name = existing
+                    break
+        if parent_name and parent_name in discovery_map:
+            local_entry = discovery_map[name]
+            parent_entry = discovery_map[parent_name]
+            # NOTE: Only copy if the parent does not already have local data set
+            # by the managed-record pre-fetch path above.
+            if not parent_entry["unifi_local_ip"] and local_entry["unifi_local_ip"]:
+                parent_entry["unifi_local_ip"] = local_entry["unifi_local_ip"]
+                parent_entry["unifi_local_record_id"] = local_entry["unifi_local_record_id"]
+            local_names_to_remove.append(name)
+        else:
+            # No parent found anywhere — rename this entry to the stripped name
+            # so + Manage adds the parent record, not a .local FQDN. Mark it
+            # local_only=True so the route can auto-enable unifi_local_enabled.
+            local_entry = discovery_map.pop(name)
+            stripped_entry = _entry(prefix)
+            stripped_entry["unifi_local_ip"] = local_entry["unifi_local_ip"]
+            stripped_entry["unifi_local_record_id"] = local_entry["unifi_local_record_id"]
+            stripped_entry["local_only"] = True
+            discovery_map[prefix] = stripped_entry
+
+    for name in local_names_to_remove:
+        del discovery_map[name]
 
     discovery_records: list[dict] = sorted(discovery_map.values(), key=lambda x: x["name"])
 

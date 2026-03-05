@@ -177,6 +177,9 @@
                 hx-on:htmx:after-request="if(event.detail.successful) location.reload()"
                 style="display:inline">
             <input type="hidden" name="record_name" value="{{ r.name }}">
+            {% if r.local_only %}
+            <input type="hidden" name="init_unifi_local" value="true">
+            {% endif %}
             <button type="submit" class="btn btn-primary btn-sm">+ Manage</button>
           </form>
           {% if r.cf_record_id %}
@@ -188,9 +191,34 @@
                 style="display:inline">
             <input type="hidden" name="record_id" value="{{ r.cf_record_id }}">
             <input type="hidden" name="record_name" value="{{ r.name }}">
-            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+            <button type="submit" class="btn btn-danger btn-sm">Delete CF</button>
           </form>
           {% endif %}
+          {% if r.unifi_record_id %}
+          <form hx-post="/delete-unifi-record"
+                hx-target="#unifi-del-status-{{ r.name | replace('.', '-') }}"
+                hx-swap="innerHTML"
+                hx-confirm="Delete UniFi policy for {{ r.name }}? This cannot be undone."
+                hx-on:htmx:after-request="if(event.detail.successful) location.reload()"
+                style="display:inline">
+            <input type="hidden" name="record_id" value="{{ r.unifi_record_id }}">
+            <input type="hidden" name="record_name" value="{{ r.name }}">
+            <button type="submit" class="btn btn-danger btn-sm">Delete UniFi</button>
+          </form>
+          {% endif %}
+          {% if r.unifi_local_record_id %}
+          <form hx-post="/delete-unifi-record"
+                hx-target="#unifi-del-status-{{ r.name | replace('.', '-') }}"
+                hx-swap="innerHTML"
+                hx-confirm="Delete UniFi .local policy for {{ r.name }}? This cannot be undone."
+                hx-on:htmx:after-request="if(event.detail.successful) location.reload()"
+                style="display:inline">
+            <input type="hidden" name="record_id" value="{{ r.unifi_local_record_id }}">
+            <input type="hidden" name="record_name" value="{{ r.name }}.local">
+            <button type="submit" class="btn btn-danger btn-sm">Delete UniFi.local</button>
+          </form>
+          {% endif %}
+          <div id="unifi-del-status-{{ r.name | replace('.', '-') }}"></div>
         {% else %}
           <span class="badge badge-ok" style="font-size:0.75rem;">&#10003; Managed</span>
         {% endif %}
@@ -229,19 +257,44 @@ function toggleStaticIp(slug, show) {
   if (w) { w.style.visibility = show ? 'visible' : 'hidden'; }
 }
 
-function toggleUnifiSection(slug, enabled) {
-  var d = document.getElementById('unifi-detail-' + slug);
-  var l = document.getElementById('unifi-local-detail-' + slug);
-  if (d) {
-    d.style.opacity = enabled ? '' : '0.4';
-    d.style.pointerEvents = enabled ? '' : 'none';
+function toggleUnifiMaster(slug, enabled) {
+  var detail = document.getElementById('unifi-detail-' + slug);
+  if (detail) {
+    detail.style.opacity = enabled ? '' : '0.4';
+    detail.style.pointerEvents = enabled ? '' : 'none';
   }
-  if (!enabled && l) { l.style.visibility = 'hidden'; }
+  if (!enabled) {
+    // Uncheck both sub-boxes and collapse their detail sections
+    var parentCb = document.getElementById('unifi-parent-cb-' + slug);
+    var localCb  = document.getElementById('unifi-local-cb-'  + slug);
+    if (parentCb && parentCb.checked) { parentCb.checked = false; toggleUnifiParent(slug, false); parentCb.dispatchEvent(new Event('change', {bubbles:true})); }
+    if (localCb  && localCb.checked)  { localCb.checked  = false; toggleUnifiLocal(slug,  false); localCb.dispatchEvent(new Event('change', {bubbles:true})); }
+  }
+}
+
+function toggleUnifiParent(slug, enabled) {
+  var d = document.getElementById('unifi-parent-detail-' + slug);
+  if (d) { d.style.display = enabled ? 'flex' : 'none'; }
+  // Keep master in sync: if enabling a sub-box, ensure master is checked
+  if (enabled) {
+    var master = document.getElementById('unifi-master-' + slug);
+    if (master) master.checked = true;
+  }
+}
+
+function toggleUnifiSection(slug, enabled) {
+  // Legacy shim — kept so any residual callers don't break
+  toggleUnifiParent(slug, enabled);
 }
 
 function toggleUnifiLocal(slug, enabled) {
   var d = document.getElementById('unifi-local-detail-' + slug);
-  if (d) { d.style.visibility = enabled ? 'visible' : 'hidden'; }
+  if (d) { d.style.display = enabled ? 'flex' : 'none'; }
+  // Keep master in sync
+  if (enabled) {
+    var master = document.getElementById('unifi-master-' + slug);
+    if (master) master.checked = true;
+  }
 }
 
 (function () {

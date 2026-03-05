@@ -21,14 +21,16 @@ from dependencies import (
     get_log_service,
     get_record_config_repo,
     get_stats_service,
+    get_unifi_client,
 )
-from exceptions import DnsProviderError
+from exceptions import DnsProviderError, UnifiProviderError
 from repositories.record_config_repository import RecordConfigRepository
 from scheduler import reschedule
 from services.config_service import ConfigService
 from services.dns_service import DnsService
 from services.log_service import LogService
 from services.stats_service import StatsService
+from cloudflare.unifi_client import UnifiClient
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +173,7 @@ def _build_record_rows(
 async def add_to_managed(
     request: Request,
     record_name: str = Form(...),
+    init_unifi_local: str = Form(default=""),
     config_service: ConfigService = Depends(get_config_service),
     log_service: LogService = Depends(get_log_service),
     stats_service: StatsService = Depends(get_stats_service),
@@ -179,11 +182,16 @@ async def add_to_managed(
     """
     Adds a DNS record to the managed list and returns an updated records table.
 
+    When init_unifi_local is "true" the record was discovered as an orphaned
+    UniFi .local policy with no parent; unifi_local_enabled is pre-set so the
+    scheduler starts managing the .local policy immediately.
+
     HTMX swaps the returned fragment into #records-container on the page.
 
     Args:
         request: The incoming FastAPI request.
         record_name: The FQDN to add, e.g. "home.example.com".
+        init_unifi_local: When "true", pre-enable unifi_local_enabled on the new record.
         config_service: Mutates the managed-records list.
         log_service: Writes a UI log entry on success.
         stats_service: Provides current stats for the rendered table.
@@ -195,6 +203,16 @@ async def add_to_managed(
     added = await config_service.add_managed_record(record_name)
     if added:
         log_service.log(f"Added '{record_name}' to managed records.", level="INFO")
+        # NOTE: When the record was discovered as an orphaned .local UniFi policy,
+        # auto-enable unifi_local_enabled so the scheduler picks it up immediately.
+        if init_unifi_local == "true":
+            rc = record_config_repo.get(record_name)
+            rc.unifi_local_enabled = True
+            record_config_repo.save(rc)
+            log_service.log(
+                f"Auto-enabled UniFi .local for '{record_name}' (created from .local discovery).",
+                level="INFO",
+            )
 
     records = await config_service.get_managed_records()
     all_stats = await stats_service.get_all()
@@ -319,6 +337,60 @@ async def delete_record(
             "error_message": error_message,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# UniFi policy management
+# ---------------------------------------------------------------------------
+
+
+@router.post("/delete-unifi-record", response_class=HTMLResponse)
+async def delete_unifi_record(
+    request: Request,
+    record_id: str = Form(...),
+    record_name: str = Form(...),
+    config_service: ConfigService = Depends(get_config_service),
+    unifi_client: UnifiClient = Depends(get_unifi_client),
+    log_service: LogService = Depends(get_log_service),
+) -> HTMLResponse:
+    """
+    Deletes a UniFi DNS policy by its UUID.
+
+    Used from the discovery panel to remove UniFi policies for records
+    that are not in the managed list.
+
+    Args:
+        request: The incoming FastAPI request.
+        record_id: The UniFi DNS policy UUID to delete.
+        record_name: The FQDN of the record (used for confirmation and logging).
+        config_service: Provides the UniFi site ID.
+        unifi_client: Executes the delete against the UniFi controller.
+        log_service: Writes a UI log entry on success or failure.
+
+    Returns:
+        An HTMLResponse with an empty body — the caller triggers a full reload.
+
+    Raises:
+        UnifiProviderError: Caught internally; returns an error fragment.
+    """
+    _, _, site_id, _, _ = await config_service.get_unifi_config()
+    error_message: str | None = None
+    try:
+        await unifi_client.delete_record(zone_id=site_id, record_id=record_id)
+        log_service.log(f"Deleted UniFi DNS policy: {record_name}", level="INFO")
+        logger.info("Deleted UniFi policy %s (%s)", record_name, record_id)
+    except UnifiProviderError as exc:
+        error_message = str(exc)
+        log_service.log(f"Failed to delete UniFi policy {record_name}: {exc}", level="ERROR")
+        logger.error("delete-unifi-record failed for %s: %s", record_name, exc)
+
+    if error_message:
+        return HTMLResponse(
+            content=f'<span style="color:#dc2626;font-size:0.85rem;">&#9888; {error_message}</span>',
+            status_code=200,
+        )
+    # Empty response — HTMX after-request handler triggers location.reload()
+    return HTMLResponse(content="", status_code=200)
 
 
 # ---------------------------------------------------------------------------

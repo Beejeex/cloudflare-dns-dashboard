@@ -141,49 +141,65 @@
         </div>
 
         {% if unifi_enabled %}
-        {# UniFi DNS section #}
+        {# UniFi DNS section — master toggle + two independent sub-checkboxes #}
         <div class="row-config-section">
+          {# Master toggle: JS-only, no form field. Checked when either sub-box is on. #}
           <label class="record-cfg-toggle">
-            <input type="checkbox" name="unifi_enabled" value="on"
-                   {% if r.cfg_unifi_enabled %}checked{% endif %}
-                   onchange="toggleUnifiSection('{{ slug }}', this.checked)">
+            <input type="checkbox" id="unifi-master-{{ slug }}"
+                   {% if r.cfg_unifi_enabled or r.cfg_unifi_local_enabled %}checked{% endif %}
+                   onchange="toggleUnifiMaster('{{ slug }}', this.checked)">
             <span style="font-weight:600; color:#7c3aed;">UniFi DNS</span>
           </label>
           <div id="unifi-detail-{{ slug }}"
-               style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.35rem; margin-top:0.4rem;
-                      {% if not r.cfg_unifi_enabled %}opacity:0.4; pointer-events:none;{% endif %}">
-            <div style="display:flex; align-items:center; gap:0.5rem;">
-              <label style="font-size:0.8rem; color:#475569; white-space:nowrap; width:70px;">IP Address</label>
-              <input type="text" name="unifi_static_ip"
-                     value="{{ r.cfg_unifi_static_ip or unifi_default_ip or '' }}"
-                     placeholder="e.g. 172.20.0.10"
-                     style="width:160px; font-size:0.8125rem; padding:0.3rem 0.6rem; border:1px solid #cbd5e1; border-radius:0.375rem;">
+               style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.5rem; margin-top:0.4rem;
+                      {% if not r.cfg_unifi_enabled and not r.cfg_unifi_local_enabled %}opacity:0.4; pointer-events:none;{% endif %}">
+
+            {# Sub-checkbox 1: parent record (unifi_enabled) #}
+            <label class="record-cfg-toggle">
+              <input type="checkbox" id="unifi-parent-cb-{{ slug }}" name="unifi_enabled" value="on"
+                     {% if r.cfg_unifi_enabled %}checked{% endif %}
+                     onchange="toggleUnifiParent('{{ slug }}', this.checked)">
+              <span style="font-size:0.875rem; color:#7c3aed;">Enable parent record</span>
+            </label>
+            <div id="unifi-parent-detail-{{ slug }}"
+                 style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.35rem;
+                        {% if not r.cfg_unifi_enabled %}display:none;{% endif %}">
+              <div style="display:flex; align-items:center; gap:0.5rem;">
+                <label style="font-size:0.8rem; color:#475569; white-space:nowrap; width:70px;">IP Address</label>
+                <input type="text" name="unifi_static_ip"
+                       value="{{ r.cfg_unifi_static_ip or unifi_default_ip or '' }}"
+                       placeholder="e.g. 172.20.0.10"
+                       style="width:160px; font-size:0.8125rem; padding:0.3rem 0.6rem; border:1px solid #cbd5e1; border-radius:0.375rem;">
+              </div>
+              <span class="text-muted" style="font-size:0.75rem;">
+                {% if r.unifi_ip %}Synced: <span class="font-mono">{{ r.unifi_ip }}</span>
+                {% else %}Will create policy on next check{% endif %}
+              </span>
             </div>
-            <span class="text-muted" style="font-size:0.75rem;">
-              {% if r.unifi_ip %}Synced: <span class="font-mono">{{ r.unifi_ip }}</span>
-              {% else %}Will create policy on next check{% endif %}
-            </span>
-            <label class="record-cfg-toggle" style="margin-top:0.2rem;">
-              <input type="checkbox" name="unifi_local_enabled" value="on"
+
+            {# Sub-checkbox 2: .local record (unifi_local_enabled) #}
+            <label class="record-cfg-toggle">
+              <input type="checkbox" id="unifi-local-cb-{{ slug }}" name="unifi_local_enabled" value="on"
                      {% if r.cfg_unifi_local_enabled %}checked{% endif %}
                      onchange="toggleUnifiLocal('{{ slug }}', this.checked)">
-              <span style="font-weight:600; color:#7c3aed;">Create .local record</span>
+              <span style="font-size:0.875rem; color:#7c3aed;">Enable .local record</span>
             </label>
             <div id="unifi-local-detail-{{ slug }}"
-                 style="display:flex; flex-direction:column; gap:0.35rem;
-                        visibility:{% if r.cfg_unifi_local_enabled %}visible{% else %}hidden{% endif %};">
-              <div style="display:flex; align-items:center; gap:0.5rem; padding-left:1.3rem;">
+                 style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.35rem;
+                        {% if not r.cfg_unifi_local_enabled %}display:none;{% endif %}">
+              <div style="display:flex; align-items:center; gap:0.5rem;">
                 <label style="font-size:0.8rem; color:#475569; white-space:nowrap; width:70px;">.local IP</label>
                 <input type="text" name="unifi_local_static_ip"
                        value="{{ r.cfg_unifi_local_static_ip or r.cfg_unifi_static_ip or unifi_default_ip or '' }}"
                        placeholder="e.g. 172.20.0.10"
                        style="width:160px; font-size:0.8125rem; padding:0.3rem 0.6rem; border:1px solid #cbd5e1; border-radius:0.375rem;">
               </div>
-              <span class="text-muted" style="font-size:0.75rem; padding-left:1.3rem;">
+              <span class="text-muted" style="font-size:0.75rem;">
                 {% if r.unifi_local_ip %}Local synced: <span class="font-mono">{{ r.unifi_local_ip }}</span>
                 {% else %}Will create &lt;host&gt;.local on next check{% endif %}
               </span>
             </div>
+
           </div>
         </div>
         {% endif %}
