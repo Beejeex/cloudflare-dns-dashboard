@@ -1,8 +1,16 @@
 # Phase 5 — Visual Refresh (All Pages)
 
-## Status: ⬜ Not started
+## Status: ✅ Complete
 
-## Constraints
+- [x] **5.1** CSS `:root` custom properties added to `base.html` — full slate/sky/green/red/amber/lime/violet palette
+- [x] **5.2** `.stat-card` redesigned: top border accent, hover lift, `.stat-card-managed/updates/failures/interval` variants; dashboard now has 5 stat cards (managed, updates, failures, interval, next-check)
+- [x] **5.3** `records_table.html` expand/collapse converted to Alpine `x-data="{expanded:false}"` + `x-show`; removed `toggleRowConfig` vanilla JS
+- [x] **5.4** `.discovery-grid` changed to `repeat(auto-fill, minmax(200px,1fr))` — no more horizontal scrollbar in 40%-wide card
+- [x] **5.5** Typography: `body` font-size `0.9375rem`, `h2` style, `.section-heading` helper, `[x-cloak]` and `.btn-secondary` added
+- [x] **5.6** Logs page: body SSE enabled for `/logs` path; `hx-trigger="load, sse:log_appended"` replaces timer poll; Alpine follow-toggle auto-scrolls log viewer
+- [x] **5.7** Settings page: Alpine `x-data` on form element manages zone array + token visibility; removed ~80-line vanilla JS block
+
+Commit: `57ec72f`
 
 - Slate color palette from copilot-instructions.md is unchanged
 - No external CSS frameworks (no Tailwind, Bootstrap, or CDN CSS)
