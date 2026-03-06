@@ -8,17 +8,25 @@
    Stat cards row
 ------------------------------------------------------------------------- #}
 <div class="card-grid mt-2">
-  <div class="stat-card">
-    <div class="stat-label">Managed Records</div>
+  <div class="stat-card stat-card-managed">
     <div class="stat-value"><span id="stat-managed">{{ records | length }}</span></div>
+    <div class="stat-label">Managed Records</div>
   </div>
-  <div class="stat-card">
-    <div class="stat-label">Check Interval</div>
+  <div class="stat-card stat-card-updates">
+    <div class="stat-value"><span id="stat-updates">{{ records | sum(attribute='updates') }}</span></div>
+    <div class="stat-label">Total Updates</div>
+  </div>
+  <div class="stat-card stat-card-failures">
+    <div class="stat-value"><span id="stat-failures" {% if records | sum(attribute='failures') > 0 %}style="color:var(--red-600)"{% endif %}>{{ records | sum(attribute='failures') }}</span></div>
+    <div class="stat-label">Total Failures</div>
+  </div>
+  <div class="stat-card stat-card-interval">
     <div class="stat-value" style="font-size:1.5rem;">{{ interval }}s</div>
+    <div class="stat-label">Check Interval</div>
   </div>
-  <div class="stat-card">
+  <div class="stat-card stat-card-interval">
+    <div class="stat-value" id="next-check-countdown" style="font-size:1.5rem; color:var(--sky-600);">&mdash;</div>
     <div class="stat-label">Next Check In</div>
-    <div class="stat-value" id="next-check-countdown" style="font-size:1.5rem; color:#0284c7;">&mdash;</div>
   </div>
 </div>
 
@@ -284,12 +292,8 @@
 {% block scripts %}
 <script>
 function toggleRowConfig(slug) {
-  var panel = document.getElementById('row-config-' + slug);
-  var btn   = document.getElementById('cfg-btn-' + slug);
-  if (!panel) return;
-  var isOpen = panel.style.display !== 'none';
-  panel.style.display = isOpen ? 'none' : 'block';
-  if (btn) btn.classList.toggle('active', !isOpen);
+  // NOTE: Kept as no-op shim; individual record rows now use Alpine x-data={expanded}
+  // to manage expand/collapse state. This stub prevents errors from any cached pages.
 }
 
 function toggleCfSection(slug, enabled) {

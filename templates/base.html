@@ -8,20 +8,54 @@
   <script src="/static/alpinejs.min.js" defer></script>
   <script src="/static/htmx-sse.js" defer></script>
   <style>
-    /* -----------------------------------------------------------------------
+    /* ---------------------------------------------------------------------------
+       Design tokens — CSS custom properties (single source of truth)
+       --------------------------------------------------------------------------- */
+    :root {
+      --slate-950: #0f172a;
+      --slate-800: #1e293b;
+      --slate-700: #334155;
+      --slate-600: #475569;
+      --slate-500: #64748b;
+      --slate-400: #94a3b8;
+      --slate-300: #cbd5e1;
+      --slate-200: #e2e8f0;
+      --slate-100: #f1f5f9;
+      --slate-50:  #f8fafc;
+      --sky-600:   #0284c7;
+      --sky-700:   #0369a1;
+      --green-600: #16a34a;
+      --green-700: #15803d;
+      --amber-500: #f59e0b;
+      --red-600:   #dc2626;
+      --red-700:   #b91c1c;
+      --lime-400:  #a3e635;
+      --violet-600:#7c3aed;
+      --violet-100:#ede9fe;
+    }
+
+    /* ---------------------------------------------------------------------------
        Reset & base
-    ----------------------------------------------------------------------- */
+       --------------------------------------------------------------------------- */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      font-size: 1rem;
+      font-size: 0.9375rem;
       line-height: 1.6;
-      background: #f1f5f9; /* slate-100 */
-      color: #1e293b;      /* slate-800 */
+      background: var(--slate-100);
+      color: var(--slate-800);
     }
 
-    a { color: #0284c7; text-decoration: none; }
+    h2 { font-size: 1rem; font-weight: 700; }
+
+    .section-heading {
+      color: var(--slate-600);
+      border-left: 3px solid var(--sky-600);
+      padding-left: 0.6rem;
+    }
+
+    a { color: var(--sky-600); text-decoration: none; }
     a:hover { text-decoration: underline; }
 
     /* -----------------------------------------------------------------------
@@ -181,26 +215,36 @@
     }
 
     .stat-card {
-      background: #fff;
-      border: 1px solid #e2e8f0;
+      border-top: 4px solid var(--sky-600);
       border-radius: 0.5rem;
-      padding: 1rem 1.25rem;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      padding: 1.25rem 1.5rem;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+      transition: transform 0.15s, box-shadow 0.15s;
     }
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.10);
+    }
+    .stat-card-managed  { border-top-color: var(--sky-600); }
+    .stat-card-updates  { border-top-color: var(--green-600); }
+    .stat-card-failures { border-top-color: var(--red-600); }
+    .stat-card-interval { border-top-color: var(--amber-500); }
 
     .stat-label {
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #64748b; /* slate-500 */
-      margin-bottom: 0.375rem;
+      letter-spacing: 0.08em;
+      color: var(--slate-500);
+      margin-top: 0.35rem;
     }
 
     .stat-value {
-      font-size: 2rem;
-      font-weight: 700;
-      color: #1e293b;
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      color: var(--slate-800);
       line-height: 1;
     }
 
@@ -485,7 +529,7 @@
     /* ---- Discovery grid (available records) ---- */
     .discovery-grid {
       display: grid;
-      grid-template-columns: repeat(6, 1fr);
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       gap: 1rem;
       padding: 1.25rem 1.5rem;
     }
@@ -697,12 +741,23 @@
     .gap-3 { gap: 0.75rem; }
     .text-sm { font-size: 0.875rem; }
     .text-xs { font-size: 0.75rem; }
-    .text-muted { color: #94a3b8; }
+    .text-muted { color: var(--slate-400); }
     .font-mono { font-family: ui-monospace, monospace; }
     .w-full { width: 100%; }
+
+    /* Alpine: hide elements marked x-cloak until Alpine initialises */
+    [x-cloak] { display: none !important; }
+
+    /* Secondary button variant (used in settings) */
+    .btn-secondary {
+      background: var(--slate-100);
+      color: var(--slate-700);
+      border: 1px solid var(--slate-300);
+    }
+    .btn-secondary:hover { background: var(--slate-200); }
   </style>
 </head>
-<body{% if request.url.path == '/' %} hx-ext="sse" sse-connect="/api/events"{% endif %}>
+<body{% if request.url.path in ['/', '/logs'] %} hx-ext="sse" sse-connect="/api/events"{% endif %}>
 
   <!-- Nav -->
   <nav class="navbar">

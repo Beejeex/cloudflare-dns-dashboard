@@ -13,6 +13,15 @@
     <div id="config-status"></div>
 
     <form id="settings-form"
+          x-data="{ zones: [], showToken: false }"
+          x-init="
+            zones = Object.entries({{ zones | safe }}).map(([d, z]) => ({ domain: d, zone_id: z }));
+            $el.addEventListener('htmx:configRequest', e => {
+              const obj = {};
+              zones.forEach(z => { if (z.domain && z.zone_id) obj[z.domain] = z.zone_id; });
+              e.detail.parameters['zones'] = JSON.stringify(obj);
+            });
+          "
           hx-post="/update-config"
           hx-target="#config-status"
           hx-swap="innerHTML">
@@ -21,11 +30,12 @@
       <div class="form-group">
         <label for="api_token">API Token</label>
         <div class="input-addon">
-          <input type="password" id="api_token" name="api_token"
+          <input :type="showToken ? 'text' : 'password'" id="api_token" name="api_token"
                  value="{{ api_token }}" autocomplete="current-password" required>
-          <button type="button" class="addon-btn" id="token-toggle"
-                  title="Show / hide token" aria-label="Toggle token visibility">
-            <span id="token-eye">&#128065;</span>
+          <button type="button" class="addon-btn"
+                  @click="showToken = !showToken"
+                  :title="showToken ? 'Hide token' : 'Show token'">
+            <span x-text="showToken ? '&#128064;' : '&#128065;'">&#128065;</span>
           </button>
         </div>
         <small>Cloudflare API token with <strong>Zone:DNS:Edit</strong> permission.</small>
@@ -34,15 +44,28 @@
       {# ---- Zones ---- #}
       <div class="form-group">
         <label>Zones</label>
-        {# Hidden field that gets serialised by JS before submit #}
+        {# Hidden field serialised by the htmx:configRequest handler in x-init #}
         <input type="hidden" id="zones" name="zones" value="{{ zones }}" required>
 
+        <div class="zone-header" x-show="zones.length > 0" x-cloak>
+          <span>Domain</span><span>Zone ID</span><span></span>
+        </div>
         <div id="zones-rows" style="display:flex; flex-direction:column; gap:0.5rem;">
-          {# Rows are injected by JS on load #}
+          <template x-for="(zone, i) in zones" :key="i">
+            <div class="zone-row">
+              <input type="text" :name="'domain_' + i" x-model="zone.domain" placeholder="example.com">
+              <input type="text" :name="'zone_id_' + i" x-model="zone.zone_id"
+                     placeholder="abc123..." class="zone-id-input">
+              <button type="button" class="btn btn-ghost btn-sm zone-remove"
+                      @click="zones.splice(i, 1)"
+                      title="Remove zone">&#x2715;</button>
+            </div>
+          </template>
         </div>
 
-        <button type="button" id="add-zone-btn"
-                class="btn btn-ghost btn-sm mt-1" style="margin-top:0.5rem;">
+        <button type="button"
+                class="btn btn-ghost btn-sm mt-1" style="margin-top:0.5rem;"
+                @click="zones.push({ domain: '', zone_id: '' })">
           + Add Zone
         </button>
         <small>Each zone maps a root domain to its Cloudflare Zone ID.</small>
@@ -251,81 +274,4 @@ subjects:
     padding: 0 0.1rem;
   }
 </style>
-<script>
-(function () {
-  /* ---- Token show/hide ---- */
-  const tokenInput  = document.getElementById('api_token');
-  const tokenToggle = document.getElementById('token-toggle');
-  const tokenEye    = document.getElementById('token-eye');
-  tokenToggle.addEventListener('click', function () {
-    const show = tokenInput.type === 'password';
-    tokenInput.type = show ? 'text' : 'password';
-    tokenEye.innerHTML = show ? '&#128064;' : '&#128065;';
-  });
-
-  /* ---- Zone rows ---- */
-  const zonesInput = document.getElementById('zones');
-  const container  = document.getElementById('zones-rows');
-  const addBtn     = document.getElementById('add-zone-btn');
-
-  function makeHeader() {
-    const hdr = document.createElement('div');
-    hdr.className = 'zone-header';
-    hdr.id = 'zone-header';
-    hdr.innerHTML = '<span>Domain</span><span>Zone ID</span><span></span>';
-    return hdr;
-  }
-
-  function makeRow(domain, zoneId) {
-    const row = document.createElement('div');
-    row.className = 'zone-row';
-    row.innerHTML =
-      '<input type="text" placeholder="example.com" value="' + escAttr(domain) + '" class="zone-domain">' +
-      '<input type="text" placeholder="abc123..." value="' + escAttr(zoneId) + '" class="zone-id-input">' +
-      '<button type="button" class="btn btn-ghost btn-sm zone-remove" title="Remove">&#x2715;</button>';
-    row.querySelector('.zone-remove').addEventListener('click', function () {
-      row.remove();
-      toggleHeader();
-    });
-    return row;
-  }
-
-  function toggleHeader() {
-    const existing = document.getElementById('zone-header');
-    const hasRows  = container.querySelector('.zone-row') !== null;
-    if (hasRows && !existing) container.insertBefore(makeHeader(), container.firstChild);
-    if (!hasRows && existing) existing.remove();
-  }
-
-  function escAttr(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-  }
-
-  /* Seed rows from existing zones JSON */
-  try {
-    const zones = JSON.parse(zonesInput.value || '{}');
-    Object.entries(zones).forEach(function ([domain, id]) {
-      container.appendChild(makeRow(domain, id));
-    });
-    toggleHeader();
-  } catch (e) { /* ignore invalid JSON */ }
-
-  addBtn.addEventListener('click', function () {
-    container.appendChild(makeRow('', ''));
-    toggleHeader();
-  });
-
-  /* Serialise rows → hidden input before HTMX sends the request */
-  document.getElementById('settings-form').addEventListener('htmx:configRequest', function (evt) {
-    const obj = {};
-    container.querySelectorAll('.zone-row').forEach(function (row) {
-      const domain = row.querySelector('.zone-domain').value.trim();
-      const id     = row.querySelector('.zone-id-input').value.trim();
-      if (domain && id) obj[domain] = id;
-    });
-    zonesInput.value = JSON.stringify(obj);
-    evt.detail.parameters['zones'] = zonesInput.value;
-  });
-}());
-</script>
 {% endblock %}

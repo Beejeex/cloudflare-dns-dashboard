@@ -8,7 +8,8 @@
   {%- elif r.cfg_unifi_enabled or r.cfg_unifi_local_enabled -%}
     {%- set unifi_target = r.cfg_unifi_static_ip or unifi_default_ip or '' -%}
     {%- if r.unifi_ip and r.unifi_ip == unifi_target %} accent-unifi-ok{%- else %} accent-unifi{%- endif -%}
-  {%- endif %}">
+  {%- endif %}"
+     x-data="{ expanded: false }">
 
   {# ── Main row: name | badge | IPs | stats | buttons ── #}
   <div class="record-row-main">
@@ -96,8 +97,8 @@
 
     {# Action buttons #}
     <div class="record-row-btns">
-      <button type="button" id="cfg-btn-{{ slug }}" class="btn-icon"
-              onclick="toggleRowConfig('{{ slug }}')" title="Configure">&#9881;</button>
+      <button type="button" class="btn-icon" :class="{ active: expanded }"
+              @click="expanded = !expanded" title="Configure">&#9881;</button>
       <form hx-post="/remove-from-managed" hx-target="#records-container" hx-swap="innerHTML"
             hx-confirm="Remove {{ r.name }} from managed? DNS record stays in Cloudflare."
             hx-on:htmx:after-request="if(event.detail.successful) location.reload()" style="display:inline">
@@ -111,8 +112,8 @@
   {# ── Inline error log — shown when user clicks the failure counter ── #}
   <div class="record-error-panel" id="record-errors-{{ slug }}" style="display:none;"></div>
 
-  {# ── Expandable config panel — shown/hidden by ⚙ button ── #}
-  <div class="record-row-config" id="row-config-{{ slug }}" style="display:none;">
+  {# ── Expandable config panel — Alpine x-show driven by ⚙ button ── #}
+  <div class="record-row-config" x-show="expanded" x-cloak>
     <form id="cfg-form-{{ slug }}"
           hx-post="/update-record-config"
           hx-target="#cfg-status-{{ slug }}"
