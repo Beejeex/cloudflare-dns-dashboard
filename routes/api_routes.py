@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 
 import httpx
 from fastapi import APIRouter, Depends, Query, Request
@@ -27,7 +28,6 @@ from dependencies import (
     get_log_service,
     get_record_config_repo,
     get_stats_repo,
-    get_stats_service,
     get_unifi_client,
     get_unifi_http_client,
 )
@@ -40,12 +40,15 @@ from services.config_service import ConfigService
 from services.dns_service import DnsService
 from services.ip_service import IpService
 from services.log_service import LogService
-from services.stats_service import StatsService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
 from shared_templates import templates  # noqa: E402
+
+# NOTE: Configurable via SSE_PING_INTERVAL env var so integration tests can
+# set it to a short value (e.g. 0.1) and avoid a 25-second hang on teardown.
+_SSE_PING_INTERVAL: float = float(os.getenv("SSE_PING_INTERVAL", "25.0"))
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +123,7 @@ async def sse_events(
                 if await request.is_disconnected():
                     break
                 try:
-                    msg = await asyncio.wait_for(q.get(), timeout=25)
+                    msg = await asyncio.wait_for(q.get(), timeout=_SSE_PING_INTERVAL)
                     yield msg
                 except asyncio.TimeoutError:
                     # NOTE: Keep-alive ping prevents proxy connection timeouts.
@@ -278,49 +281,11 @@ async def get_recent_logs(
     Returns:
         An HTMLResponse containing the log-panel partial fragment.
     """
-    recent_logs = log_service.get_recent(limit=50)
+    recent_logs = log_service.get_recent(limit=100)
     return templates.TemplateResponse(
         request,
         "partials/log_panel.html",
         {"logs": recent_logs},
-    )
-
-
-@router.get("/status", response_class=HTMLResponse)
-async def get_status(
-    request: Request,
-    config_service: ConfigService = Depends(get_config_service),
-    stats_service: StatsService = Depends(get_stats_service),
-) -> HTMLResponse:
-    """
-    Returns current IP and record status as an HTML fragment for HTMX polling.
-
-    Args:
-        request: The incoming FastAPI request.
-        config_service: Provides the managed records list and refresh interval.
-        stats_service: Provides up-to-date stats per record.
-
-    Returns:
-        An HTMLResponse containing the status-bar partial fragment.
-    """
-    # Fetch current public IP — show "Unavailable" rather than raising
-    current_ip = "Unavailable"
-    try:
-        from services.ip_service import IpService
-        ip_service = IpService(request.app.state.http_client, app_state=request.app.state)
-        current_ip = await ip_service.get_public_ip()
-    except IpFetchError as exc:
-        logger.warning("Could not fetch public IP for status endpoint: %s", exc)
-
-    all_stats = await stats_service.get_all()
-
-    return templates.TemplateResponse(
-        request,
-        "partials/status_bar.html",
-        {
-            "current_ip": current_ip,
-            "stats": all_stats,
-        },
     )
 
 

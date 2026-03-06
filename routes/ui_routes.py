@@ -345,7 +345,7 @@ async def logs_page(
     Returns:
         An HTMLResponse rendering templates/logs.html.
     """
-    recent_logs = log_service.get_recent(limit=200)
+    recent_logs = log_service.get_recent(limit=100)
     refresh = await config_service.get_refresh_interval()
     return templates.TemplateResponse(
         request,

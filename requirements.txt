@@ -25,9 +25,6 @@ tldextract
 # Kubernetes cluster API client
 kubernetes
 
-# Async file I/O
-aiofiles
-
 # Testing
 pytest
 pytest-asyncio
