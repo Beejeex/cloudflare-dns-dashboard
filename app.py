@@ -80,6 +80,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     http_client = httpx.AsyncClient(timeout=10.0)
     app.state.http_client = http_client
 
+    # Shared IP cache — populated by IpService; shared across all requests
+    app.state.ip_cache = {"ip": None, "fetched_at": 0.0}
+
     # NOTE: UniFi controllers use self-signed certs so a dedicated client with
     # verify=False is kept for all UniFi calls rather than disabling SSL globally.
     unifi_http_client = httpx.AsyncClient(verify=False, timeout=10.0)

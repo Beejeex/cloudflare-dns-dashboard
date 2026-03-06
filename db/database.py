@@ -131,6 +131,15 @@ def _run_migrations() -> None:
             )
             logger.info("Migration: added 'unifi_local_static_ip' column to recordconfig table.")
 
+        # WORKAROUND: cf_enabled was incorrectly defaulted to False in earlier versions.
+        # Any row written by the old model has cf_enabled=0, which silently disabled
+        # Cloudflare DDNS for every record.  Correct all such rows on startup.
+        if "cf_enabled" in rc_existing:
+            conn.exec_driver_sql("UPDATE recordconfig SET cf_enabled = 1 WHERE cf_enabled = 0")
+            logger.debug("Migration: corrected cf_enabled=0 rows in recordconfig table.")
+
+        conn.commit()
+
 
 def get_session() -> Generator[Session, None, None]:
     """

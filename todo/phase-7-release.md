@@ -4,6 +4,7 @@
 
 > Per copilot-instructions.md: all four version locations must be updated together.
 > README must be updated **before** any version bump in code or tags.
+> **Version tags and GHCR image builds happen on `main` only — after `feature/ui-v3` is merged.**
 
 ---
 
@@ -59,16 +60,20 @@
   - On Logs page: confirm new log entries appear via push, no timer-based flicker
   - On Settings page: add/remove a zone row using Alpine.js controls; verify form submits correctly
 
-- [ ] **7.6** Commit, tag, and push
+- [ ] **7.6** Merge `feature/ui-v3` into `main` — tagging and image builds happen on `main` only
   ```bash
-  git add -A
-  git commit -m "v2.1.0 — UI v3: SSE, side-by-side records, Alpine.js, visual refresh"
-  git tag v2.1.0
+  git checkout main
+  git merge --no-ff feature/ui-v3 -m "v2.1.0 — UI v3: SSE, side-by-side records, Alpine.js, visual refresh"
   git push
+  ```
+
+- [ ] **7.7** Tag the merge commit on `main` and push the tag
+  ```bash
+  git tag v2.1.0
   git push origin v2.1.0
   ```
 
-- [ ] **7.7** Build and push GHCR images
+- [ ] **7.8** Build and push GHCR images (from `main` after merge)
   ```bash
   docker build -t cloudflare-dns-dashboard:v2.1.0 -t cloudflare-dns-dashboard:latest .
   docker tag cloudflare-dns-dashboard:v2.1.0 ghcr.io/beejeex/cloudflare-dns-dashboard:v2.1.0

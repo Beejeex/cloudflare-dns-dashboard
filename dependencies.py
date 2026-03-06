@@ -158,18 +158,24 @@ def get_log_service(session: Session = Depends(get_session)) -> LogService:
 
 
 def get_ip_service(
+    request: Request,
     http_client: httpx.AsyncClient = Depends(get_http_client),
 ) -> IpService:
     """
-    Provides an IpService using the shared HTTP client.
+    Provides an IpService using the shared HTTP client and app.state for caching.
+
+    The app.state reference allows IpService to read and write the shared
+    ip_cache dict, so concurrent callers within the same interval share a
+    single upstream call rather than each issuing their own.
 
     Args:
+        request: The current FastAPI Request (injected automatically).
         http_client: The application-level httpx.AsyncClient.
 
     Returns:
-        An IpService instance.
+        An IpService instance with cache access.
     """
-    return IpService(http_client)
+    return IpService(http_client, app_state=request.app.state)
 
 
 async def get_dns_provider(

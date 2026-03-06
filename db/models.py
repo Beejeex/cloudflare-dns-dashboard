@@ -113,7 +113,10 @@ class RecordConfig(SQLModel, table=True):
     record_name: str = Field(unique=True, index=True)
 
     # Whether Cloudflare DDNS updates are active for this record
-    cf_enabled: bool = Field(default=False)
+    # NOTE: default=True because opting INTO Cloudflare DDNS is the expected
+    # behaviour when a record is added. An earlier model had default=False
+    # which silently disabled updates for all newly created rows.
+    cf_enabled: bool = Field(default=True)
 
     # "dynamic" — always use the current public IP detected by IpService
     # "static"  — always use static_ip, never auto-update

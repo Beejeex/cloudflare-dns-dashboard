@@ -1,6 +1,6 @@
 # Phase 2 — Backend Performance Fixes
 
-## Status: ⬜ Not started
+## Status: ✅ Done
 
 ## Root causes identified
 
@@ -16,7 +16,7 @@
 
 ## Tasks
 
-- [ ] **2.1** Add in-memory IP cache to `services/ip_service.py`
+- [x] **2.1** Add in-memory IP cache to `services/ip_service.py`
   - Store `(ip: str, fetched_at: float)` on `app.state.ip_cache`
   - TTL: 30 seconds
   - `get_public_ip()` returns cached result within TTL; otherwise fetches fresh and updates cache
@@ -24,26 +24,26 @@
   - Update `dependencies.py`: pass `request.app.state` into `IpService` constructor
   - Update `app.py` lifespan: `app.state.ip_cache = {"ip": None, "fetched_at": 0.0}`
 
-- [ ] **2.2** Add `DnsService.fetch_zone_record_map()` to `services/dns_service.py`
+- [x] **2.2** Add `DnsService.fetch_zone_record_map()` to `services/dns_service.py`
   - Signature: `async def fetch_zone_record_map(self, managed_records: list[str], zones: dict[str, str]) -> dict[str, DnsRecord | None]`
   - Calls `dns_provider.list_records(zone_id)` **once per zone** (not once per record)
   - Builds and returns `{fqdn: DnsRecord | None}` lookup dict from the zone batch result
   - Dashboard full-page render (`GET /`) and records poll (`GET /api/records`) both switch to this
   - Old `check_single_record()` is kept — the scheduler still uses it for targeted per-record updates
 
-- [ ] **2.3** Add `StatsRepository.get_bulk()` to `repositories/stats_repository.py`
+- [x] **2.3** Add `StatsRepository.get_bulk()` to `repositories/stats_repository.py`
   - Signature: `def get_bulk(self, names: list[str]) -> dict[str, RecordStats]`
   - Uses `select(RecordStats).where(RecordStats.record_name.in_(names))` — single query
   - All dashboard and records-poll renderers switch to this
   - Per-record `get_for_record()` is kept — scheduler write path still uses it
 
-- [ ] **2.4** Add request-scoped config cache to `services/config_service.py`
+- [x] **2.4** Add request-scoped config cache to `services/config_service.py`
   - Add `_config: AppConfig | None = None` instance attribute
   - Extract private `_load() -> AppConfig` that returns `self._config` if set, otherwise calls `self._repo.load()` and caches
   - All `get_*` helper methods call `self._load()` instead of `self._repo.load()` directly
   - Invalidate: `self._config = None` inside any `save_config()` / mutating method so next read is fresh
 
-- [ ] **2.5** Fix `RecordConfig.cf_enabled` default mismatch
+- [x] **2.5** Fix `RecordConfig.cf_enabled` default mismatch
   - `db/models.py`: change `cf_enabled: bool = Field(default=False, ...)` → `default=True`
   - `db/database.py` `_run_migrations()`: add guard to correct existing rows that were set to `False` by the old default
     ```python
