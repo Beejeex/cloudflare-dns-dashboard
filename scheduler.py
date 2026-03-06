@@ -340,7 +340,8 @@ async def _ddns_check_job(
         try:
             _ip_svc = IpService(http_client=http_client)
             _current_ip = await _ip_svc.get_public_ip()
-            broadcaster.publish("ip_updated", json.dumps({"ip": _current_ip}))
+            # NOTE: Plain text — HTMX sse-swap uses it as innerHTML directly
+            broadcaster.publish("ip_updated", _current_ip)
         except Exception as exc:
             logger.debug("Broadcaster: could not publish ip_updated: %s", exc)
 

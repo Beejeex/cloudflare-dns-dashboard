@@ -702,7 +702,7 @@
     .w-full { width: 100%; }
   </style>
 </head>
-<body>
+<body{% if request.url.path == '/' %} hx-ext="sse" sse-connect="/api/events"{% endif %}>
 
   <!-- Nav -->
   <nav class="navbar">
@@ -725,9 +725,14 @@
       <div class="navbar-ip">
         Public IP:
         <strong id="current-ip"
+                {% if request.url.path == '/' %}
+                sse-swap="ip_updated"
+                hx-swap="innerHTML"
+                {% else %}
                 hx-get="/api/current-ip"
-                hx-trigger="load, every 30s"
-                hx-swap="innerHTML">—</strong>
+                hx-trigger="load"
+                hx-swap="innerHTML"
+                {% endif %}>—</strong>
       </div>
     </div>
   </nav>

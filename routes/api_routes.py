@@ -97,7 +97,8 @@ async def sse_events(
                 current_ip = await ip_service.get_public_ip()
             except IpFetchError as exc:
                 logger.warning("SSE on-connect: could not fetch public IP: %s", exc)
-            yield {"event": "ip_updated", "data": json.dumps({"ip": current_ip})}
+            # NOTE: Plain text so HTMX sse-swap can set it directly as innerHTML
+            yield {"event": "ip_updated", "data": current_ip}
 
             # --- On-connect: push live records fragment ---
             try:
@@ -449,21 +450,21 @@ async def get_records(
     request: Request,
     config_service: ConfigService = Depends(get_config_service),
     dns_service: DnsService = Depends(get_dns_service),
-    stats_service: StatsService = Depends(get_stats_service),
+    stats_repo: StatsRepository = Depends(get_stats_repo),
     unifi_client: UnifiClient = Depends(get_unifi_client),
     record_config_repo: RecordConfigRepository = Depends(get_record_config_repo),
 ) -> HTMLResponse:
     """
     Returns the managed records table as an HTMX fragment, plus OOB stat card updates.
 
-    Polled by the dashboard every 30 s so IP status, sync badges, and
-    update/failure counters stay current without a full page reload.
+    Triggered by the SSE `records_updated` event (or a manual sync).  Uses
+    bulk zone + stats lookups to avoid N individual Cloudflare API calls.
 
     Args:
         request: The incoming FastAPI request.
         config_service: Provides configuration and managed records.
         dns_service: Fetches live DNS record state from Cloudflare.
-        stats_service: Provides per-record update/failure counters.
+        stats_repo: Provides per-record update/failure counters (bulk query).
         unifi_client: Fetches live UniFi DNS policies.
         record_config_repo: Provides per-record settings.
 
@@ -494,16 +495,20 @@ async def get_records(
         except UnifiProviderError as exc:
             logger.warning("UniFi policy fetch failed during records refresh: %s", exc)
 
+    # Bulk DNS fetch (one call per zone) + bulk stats (one DB SELECT IN)
+    zone_record_map: dict = {}
+    if config.api_token and zones:
+        try:
+            zone_record_map = await dns_service.fetch_zone_record_map(managed_records, zones)
+        except DnsProviderError as exc:
+            logger.warning("records refresh: bulk CF lookup failed: %s", exc)
+
+    stats_bulk = stats_repo.get_bulk(managed_records)
+
     record_data = []
     for record_name in managed_records:
-        dns_record = None
-        if config.api_token and zones:
-            try:
-                dns_record = await dns_service.check_single_record(record_name, zones)
-            except DnsProviderError as exc:
-                logger.warning("records refresh: CF lookup failed for %s: %s", record_name, exc)
-
-        stats = await stats_service.get_for_record(record_name)
+        dns_record = zone_record_map.get(record_name)
+        stats = stats_bulk.get(record_name)
         dns_ip = dns_record.content if dns_record else "Not Found"
         rc = record_configs.get(record_name)
         cf_enabled = rc.cf_enabled if rc else True

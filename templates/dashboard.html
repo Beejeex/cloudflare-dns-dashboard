@@ -49,49 +49,207 @@
 {% endif %}
 
 {# -------------------------------------------------------------------------
-   Managed records — Cloudflare + UniFi unified table
+   Two-column layout: Managed (60fr left) | Discovery (40fr right)
 ------------------------------------------------------------------------- #}
-<div class="card mb-2">
-  <div class="card-header">
-    <span class="card-title">Managed DNS Records</span>
-    <div style="display:flex; align-items:center; gap:0.75rem;">
-      {% if unifi_enabled %}
-      <span style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.75rem; color:#64748b;">
-        <span style="width:8px; height:8px; border-radius:50%; background:#0284c7; display:inline-block;"></span>
-        UniFi active
-      </span>
-      {% endif %}
-      {% if k8s_enabled %}
-      <span style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.75rem; color:#64748b;">
-        <span style="width:8px; height:8px; border-radius:50%; background:#16a34a; display:inline-block;"></span>
-        K8s active
-      </span>
-      {% endif %}
-      <span class="htmx-indicator text-xs text-muted">updating…</span>
-      <button id="sync-now-btn"
-              hx-post="/api/trigger-sync"
-              hx-target="#sync-now-status"
-              hx-swap="innerHTML"
-              hx-indicator="#sync-now-btn"
-              hx-on:htmx:before-request="this.disabled=true; this.textContent='Syncing…'"
-              hx-on:htmx:after-request="this.disabled=false; this.textContent='Sync Now'; if(event.detail.successful) setTimeout(()=>location.reload(), 400)"
-              class="btn btn-ghost btn-sm" style="font-size:0.8rem;">
-        Sync Now
-      </button>
-      <span id="sync-now-status" style="font-size:0.8rem; color:#64748b;"></span>
+<div style="display:grid; grid-template-columns:60fr 40fr; gap:1rem; align-items:start; margin-bottom:1rem;">
+
+  {# ---- LEFT: Managed records (SSE-live, no polling) ---- #}
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Managed DNS Records</span>
+      <div style="display:flex; align-items:center; gap:0.75rem;">
+        {% if unifi_enabled %}
+        <span style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.75rem; color:#64748b;">
+          <span style="width:8px; height:8px; border-radius:50%; background:#0284c7; display:inline-block;"></span>
+          UniFi active
+        </span>
+        {% endif %}
+        {% if k8s_enabled %}
+        <span style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.75rem; color:#64748b;">
+          <span style="width:8px; height:8px; border-radius:50%; background:#16a34a; display:inline-block;"></span>
+          K8s active
+        </span>
+        {% endif %}
+        <span class="htmx-indicator text-xs text-muted">updating…</span>
+        <button id="sync-now-btn"
+                hx-post="/api/trigger-sync"
+                hx-target="#sync-now-status"
+                hx-swap="innerHTML"
+                hx-indicator="#sync-now-btn"
+                hx-on:htmx:before-request="this.disabled=true; this.textContent='Syncing…'"
+                hx-on:htmx:after-request="this.disabled=false; this.textContent='Sync Now'"
+                class="btn btn-ghost btn-sm" style="font-size:0.8rem;">
+          Sync Now
+        </button>
+        <span id="sync-now-status" style="font-size:0.8rem; color:#64748b;"></span>
+      </div>
+    </div>
+
+    {# SSE swap target — replaces innerHTML when records_updated event fires #}
+    <div id="records-container"
+         sse-swap="records_updated"
+         hx-swap="innerHTML">
+      {% include "partials/records_table.html" %}
     </div>
   </div>
 
-  <div id="records-container"
-       hx-get="/api/records"
-       hx-trigger="every 30s"
-       hx-swap="innerHTML">
-    {% include "partials/records_table.html" %}
+  {# ---- RIGHT: Available Records (Alpine.js client-side filter) ---- #}
+  <div class="card"
+       x-data="{
+         search: '',
+         filter: 'all',
+         matches(el) {
+           const name    = (el.dataset.name    || '').toLowerCase();
+           const sources = (el.dataset.sources || '').toLowerCase();
+           const managed = (el.dataset.managed || '').toLowerCase();
+           const ms = !this.search || name.includes(this.search.toLowerCase());
+           const mf = this.filter === 'all'
+             || (this.filter === 'managed'   && managed === 'managed')
+             || (this.filter === 'unmanaged' && managed === 'unmanaged')
+             || sources.includes(this.filter);
+           return ms && mf;
+         }
+       }">
+    <div class="card-header" style="flex-wrap:wrap; gap:0.5rem;">
+      <span class="card-title">Available Records</span>
+      <span style="font-size:0.75rem; color:#64748b;">
+        {{ discovery_records | length }} record{{ 's' if discovery_records | length != 1 else '' }}
+      </span>
+      {# Search + source filter — Alpine.js reactive, zero network calls #}
+      <div style="display:flex; align-items:center; gap:0.5rem; margin-left:auto; flex-wrap:wrap;">
+        <input x-model="search" type="search" placeholder="Search records…"
+               style="font-size:0.8125rem; padding:0.3rem 0.65rem; border:1px solid #cbd5e1;
+                      border-radius:0.375rem; width:190px; outline:none;">
+        <div style="display:flex; gap:0.25rem; flex-wrap:wrap;">
+          <button class="disc-filter-btn" :class="{ active: filter === 'all' }"       @click="filter='all'">All</button>
+          <button class="disc-filter-btn" :class="{ active: filter === 'cf' }"        @click="filter='cf'">CF</button>
+          <button class="disc-filter-btn" :class="{ active: filter === 'unifi' }"     @click="filter='unifi'">UniFi</button>
+          <button class="disc-filter-btn" :class="{ active: filter === 'k8s' }"       @click="filter='k8s'">K8s</button>
+          <button class="disc-filter-btn" :class="{ active: filter === 'managed' }"   @click="filter='managed'">Managed</button>
+          <button class="disc-filter-btn" :class="{ active: filter === 'unmanaged' }" @click="filter='unmanaged'">Unmanaged</button>
+        </div>
+      </div>
+    </div>
+
+    {# Per-source error banners #}
+    {% if zone_records_error %}
+    <div style="padding:0.5rem 1.25rem; background:#fef3c7; border-bottom:1px solid #fde68a; color:#92400e; font-size:0.8rem;">
+      &#9888; Cloudflare: {{ zone_records_error }}
+    </div>
+    {% endif %}
+    {% if k8s_error %}
+    <div style="padding:0.5rem 1.25rem; background:#fef3c7; border-bottom:1px solid #fde68a; color:#92400e; font-size:0.8rem;">
+      &#9888; Kubernetes: {{ k8s_error }}
+    </div>
+    {% endif %}
+
+    {% if discovery_records %}
+    <div class="discovery-grid">
+      {% for r in discovery_records %}
+      {%- set srcs = [] %}
+      {%- if r.cf_ip is not none    %}{%- set srcs = srcs + ['cf']    %}{%- endif %}
+      {%- if r.unifi_ip is not none or r.unifi_local_ip is not none %}{%- set srcs = srcs + ['unifi'] %}{%- endif %}
+      {%- if r.k8s_namespace is not none %}{%- set srcs = srcs + ['k8s']   %}{%- endif %}
+      {# x-show="matches($el)" lets Alpine reactively show/hide based on search + filter #}
+      <div class="discovery-card{% if r.name in managed_names %} discovery-card-managed{% endif %}"
+           data-name="{{ r.name | lower }}"
+           data-sources="{{ srcs | join(' ') }}"
+           data-managed="{{ 'managed' if r.name in managed_names else 'unmanaged' }}"
+           x-show="matches($el)">
+        {# Source badges row #}
+        <div class="discovery-card-top">
+          {% if r.cf_ip is not none %}
+            <span class="badge badge-cf" style="font-size:0.7rem;">CF</span>
+          {% endif %}
+          {% if r.unifi_ip is not none %}
+            <span class="badge badge-unifi" style="font-size:0.7rem;">UniFi</span>
+          {% endif %}
+          {% if r.k8s_namespace is not none %}
+            <span class="badge badge-k8s" style="font-size:0.7rem;">K8s</span>
+          {% endif %}
+        </div>
+        <div class="discovery-card-name font-mono">{{ r.name }}</div>
+        {# Per-source IP / metadata rows #}
+        <div class="discovery-card-meta" style="display:flex; flex-direction:column; gap:0.15rem;">
+          {% if r.cf_ip is not none %}
+            <span><span class="badge badge-cf" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">CF</span>
+            <span class="font-mono"> {{ r.cf_ip }}</span></span>
+          {% endif %}
+          {% if r.unifi_ip is not none %}
+            <span><span class="badge badge-unifi" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">UniFi</span>
+            <span class="font-mono"> {{ r.unifi_ip }}</span></span>
+          {% endif %}
+          {% if r.unifi_local_ip is not none %}
+            <span><span class="badge badge-unifi" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">UniFi.local</span>
+            <span class="font-mono"> {{ r.unifi_local_ip }}</span></span>
+          {% endif %}
+          {% if r.k8s_namespace is not none %}
+            <span><span class="badge badge-k8s" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">K8s</span>
+             {{ r.k8s_namespace }}/{{ r.k8s_ingress_name }}</span>
+          {% endif %}
+        </div>
+        <div class="discovery-card-actions">
+          {% if r.name not in managed_names %}
+            <form hx-post="/add-to-managed"
+                  hx-target="#records-container"
+                  hx-swap="innerHTML"
+                  style="display:inline">
+              <input type="hidden" name="record_name" value="{{ r.name }}">
+              {% if r.local_only %}
+              <input type="hidden" name="init_unifi_local" value="true">
+              {% endif %}
+              <button type="submit" class="btn btn-primary btn-sm">+ Manage</button>
+            </form>
+            {% if r.cf_record_id %}
+            <form hx-post="/delete-record"
+                  hx-target="#records-container"
+                  hx-swap="innerHTML"
+                  hx-confirm="Delete {{ r.name }} from Cloudflare? This cannot be undone."
+                  style="display:inline">
+              <input type="hidden" name="record_id" value="{{ r.cf_record_id }}">
+              <input type="hidden" name="record_name" value="{{ r.name }}">
+              <button type="submit" class="btn btn-danger btn-sm">Delete CF</button>
+            </form>
+            {% endif %}
+            {% if r.unifi_record_id %}
+            <form hx-post="/delete-unifi-record"
+                  hx-target="#unifi-del-status-{{ r.name | replace('.', '-') }}"
+                  hx-swap="innerHTML"
+                  hx-confirm="Delete UniFi policy for {{ r.name }}? This cannot be undone."
+                  style="display:inline">
+              <input type="hidden" name="record_id" value="{{ r.unifi_record_id }}">
+              <input type="hidden" name="record_name" value="{{ r.name }}">
+              <button type="submit" class="btn btn-danger btn-sm">Delete UniFi</button>
+            </form>
+            {% endif %}
+            {% if r.unifi_local_record_id %}
+            <form hx-post="/delete-unifi-record"
+                  hx-target="#unifi-del-status-{{ r.name | replace('.', '-') }}"
+                  hx-swap="innerHTML"
+                  hx-confirm="Delete UniFi .local policy for {{ r.name }}? This cannot be undone."
+                  style="display:inline">
+              <input type="hidden" name="record_id" value="{{ r.unifi_local_record_id }}">
+              <input type="hidden" name="record_name" value="{{ r.name }}.local">
+              <button type="submit" class="btn btn-danger btn-sm">Delete UniFi.local</button>
+            </form>
+            {% endif %}
+            <div id="unifi-del-status-{{ r.name | replace('.', '-') }}"></div>
+          {% else %}
+            <span class="badge badge-ok" style="font-size:0.75rem;">&#10003; Managed</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="card-body"><span class="text-muted text-sm">No records discovered yet.</span></div>
+    {% endif %}
   </div>
-</div>
+
+</div>{# end two-column grid #}
 
 {# -------------------------------------------------------------------------
-   Create new A-record
+   Create new A-record — below the main grid
 ------------------------------------------------------------------------- #}
 <div class="card mb-2">
   <div class="card-header">
@@ -102,7 +260,7 @@
     <form hx-post="/create-record"
           hx-target="#create-record-status"
           hx-swap="innerHTML"
-          hx-on:htmx:after-request="if(event.detail.successful && !document.getElementById('create-record-status').querySelector('.alert-error')) { this.reset(); location.reload(); }"
+          hx-on:htmx:after-request="if(event.detail.successful && !document.getElementById('create-record-status').querySelector('.alert-error')) { this.reset(); }"
           style="display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap;">
       <div class="form-group" style="flex:2; min-width:180px; margin-bottom:0;">
         <label for="create-record-name">Record Name (FQDN)</label>
@@ -119,150 +277,6 @@
       </div>
     </form>
   </div>
-</div>
-
-{# -------------------------------------------------------------------------
-   Available Records — compact card grid
-------------------------------------------------------------------------- #}
-<div class="card mb-2">
-  <div class="card-header" style="flex-wrap:wrap; gap:0.5rem;">
-    <span class="card-title">Available Records</span>
-    <span id="discovery-count" style="font-size:0.75rem; color:#64748b;">
-      {{ discovery_records | length }} record{{ 's' if discovery_records | length != 1 else '' }}
-    </span>
-    {# Search + source filter — purely client-side, zero network calls #}
-    <div style="display:flex; align-items:center; gap:0.5rem; margin-left:auto; flex-wrap:wrap;">
-      <input id="discovery-search" type="search" placeholder="Search records…"
-             oninput="filterDiscovery()"
-             style="font-size:0.8125rem; padding:0.3rem 0.65rem; border:1px solid #cbd5e1;
-                    border-radius:0.375rem; width:190px; outline:none;">
-      <div style="display:flex; gap:0.25rem;">
-        <button class="disc-filter-btn active" data-filter="all"   onclick="setDiscoveryFilter('all',   this)">All</button>
-        <button class="disc-filter-btn"        data-filter="cf"    onclick="setDiscoveryFilter('cf',    this)">CF</button>
-        <button class="disc-filter-btn"        data-filter="unifi" onclick="setDiscoveryFilter('unifi', this)">UniFi</button>
-        <button class="disc-filter-btn"        data-filter="k8s"   onclick="setDiscoveryFilter('k8s',   this)">K8s</button>
-        <button class="disc-filter-btn"        data-filter="managed"   onclick="setDiscoveryFilter('managed',   this)">Managed</button>
-        <button class="disc-filter-btn"        data-filter="unmanaged" onclick="setDiscoveryFilter('unmanaged', this)">Unmanaged</button>
-      </div>
-    </div>
-  </div>
-
-  {# Error banners #}
-  {% if zone_records_error %}
-  <div style="padding:0.5rem 1.25rem; background:#fef3c7; border-bottom:1px solid #fde68a; color:#92400e; font-size:0.8rem;">
-    &#9888; Cloudflare: {{ zone_records_error }}
-  </div>
-  {% endif %}
-  {% if k8s_error %}
-  <div style="padding:0.5rem 1.25rem; background:#fef3c7; border-bottom:1px solid #fde68a; color:#92400e; font-size:0.8rem;">
-    &#9888; Kubernetes: {{ k8s_error }}
-  </div>
-  {% endif %}
-
-  {% if discovery_records %}
-  <div class="discovery-grid">
-    {% for r in discovery_records %}
-    {%- set src_classes = '' %}
-    {%- set srcs = [] %}
-    {%- if r.cf_ip is not none    %}{%- set srcs = srcs + ['cf']    %}{%- endif %}
-    {%- if r.unifi_ip is not none or r.unifi_local_ip is not none %}{%- set srcs = srcs + ['unifi'] %}{%- endif %}
-    {%- if r.k8s_namespace is not none %}{%- set srcs = srcs + ['k8s']   %}{%- endif %}
-    <div class="discovery-card{% if r.name in managed_names %} discovery-card-managed{% endif %}"
-         data-name="{{ r.name | lower }}"
-         data-sources="{{ srcs | join(' ') }}"
-         data-managed="{{ 'managed' if r.name in managed_names else 'unmanaged' }}">
-      {# Source badges row #}
-      <div class="discovery-card-top">
-        {% if r.cf_ip is not none %}
-          <span class="badge badge-cf" style="font-size:0.7rem;">CF</span>
-        {% endif %}
-        {% if r.unifi_ip is not none %}
-          <span class="badge badge-unifi" style="font-size:0.7rem;">UniFi</span>
-        {% endif %}
-        {% if r.k8s_namespace is not none %}
-          <span class="badge badge-k8s" style="font-size:0.7rem;">K8s</span>
-        {% endif %}
-      </div>
-      <div class="discovery-card-name font-mono">{{ r.name }}</div>
-      {# Per-source IP / metadata rows #}
-      <div class="discovery-card-meta" style="display:flex; flex-direction:column; gap:0.15rem;">
-        {% if r.cf_ip is not none %}
-          <span><span class="badge badge-cf" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">CF</span>
-          <span class="font-mono"> {{ r.cf_ip }}</span></span>
-        {% endif %}
-        {% if r.unifi_ip is not none %}
-          <span><span class="badge badge-unifi" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">UniFi</span>
-          <span class="font-mono"> {{ r.unifi_ip }}</span></span>
-        {% endif %}
-        {% if r.unifi_local_ip is not none %}
-          <span><span class="badge badge-unifi" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">UniFi.local</span>
-          <span class="font-mono"> {{ r.unifi_local_ip }}</span></span>
-        {% endif %}
-        {% if r.k8s_namespace is not none %}
-          <span><span class="badge badge-k8s" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">K8s</span>
-           {{ r.k8s_namespace }}/{{ r.k8s_ingress_name }}</span>
-        {% endif %}
-      </div>
-      <div class="discovery-card-actions">
-        {% if r.name not in managed_names %}
-          <form hx-post="/add-to-managed"
-                hx-target="#records-container"
-                hx-swap="innerHTML"
-                hx-on:htmx:after-request="if(event.detail.successful) location.reload()"
-                style="display:inline">
-            <input type="hidden" name="record_name" value="{{ r.name }}">
-            {% if r.local_only %}
-            <input type="hidden" name="init_unifi_local" value="true">
-            {% endif %}
-            <button type="submit" class="btn btn-primary btn-sm">+ Manage</button>
-          </form>
-          {% if r.cf_record_id %}
-          <form hx-post="/delete-record"
-                hx-target="#records-container"
-                hx-swap="innerHTML"
-                hx-confirm="Delete {{ r.name }} from Cloudflare? This cannot be undone."
-                hx-on:htmx:after-request="if(event.detail.successful) location.reload()"
-                style="display:inline">
-            <input type="hidden" name="record_id" value="{{ r.cf_record_id }}">
-            <input type="hidden" name="record_name" value="{{ r.name }}">
-            <button type="submit" class="btn btn-danger btn-sm">Delete CF</button>
-          </form>
-          {% endif %}
-          {% if r.unifi_record_id %}
-          <form hx-post="/delete-unifi-record"
-                hx-target="#unifi-del-status-{{ r.name | replace('.', '-') }}"
-                hx-swap="innerHTML"
-                hx-confirm="Delete UniFi policy for {{ r.name }}? This cannot be undone."
-                hx-on:htmx:after-request="if(event.detail.successful) location.reload()"
-                style="display:inline">
-            <input type="hidden" name="record_id" value="{{ r.unifi_record_id }}">
-            <input type="hidden" name="record_name" value="{{ r.name }}">
-            <button type="submit" class="btn btn-danger btn-sm">Delete UniFi</button>
-          </form>
-          {% endif %}
-          {% if r.unifi_local_record_id %}
-          <form hx-post="/delete-unifi-record"
-                hx-target="#unifi-del-status-{{ r.name | replace('.', '-') }}"
-                hx-swap="innerHTML"
-                hx-confirm="Delete UniFi .local policy for {{ r.name }}? This cannot be undone."
-                hx-on:htmx:after-request="if(event.detail.successful) location.reload()"
-                style="display:inline">
-            <input type="hidden" name="record_id" value="{{ r.unifi_local_record_id }}">
-            <input type="hidden" name="record_name" value="{{ r.name }}.local">
-            <button type="submit" class="btn btn-danger btn-sm">Delete UniFi.local</button>
-          </form>
-          {% endif %}
-          <div id="unifi-del-status-{{ r.name | replace('.', '-') }}"></div>
-        {% else %}
-          <span class="badge badge-ok" style="font-size:0.75rem;">&#10003; Managed</span>
-        {% endif %}
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% else %}
-  <div class="card-body"><span class="text-muted text-sm">No records discovered yet.</span></div>
-  {% endif %}
 </div>
 
 {% endblock %}
@@ -329,40 +343,6 @@ function toggleUnifiLocal(slug, enabled) {
     var master = document.getElementById('unifi-master-' + slug);
     if (master) master.checked = true;
   }
-}
-
-// ── Discovery search + filter ──────────────────────────────────────────────
-var _discFilter = 'all';
-
-function filterDiscovery() {
-  var query  = (document.getElementById('discovery-search').value || '').toLowerCase().trim();
-  var cards  = document.querySelectorAll('.discovery-card');
-  var visible = 0;
-  cards.forEach(function(card) {
-    var name    = (card.dataset.name    || '').toLowerCase();
-    var sources = (card.dataset.sources || '').toLowerCase();
-    var managed = (card.dataset.managed || '').toLowerCase();
-    var matchSearch = !query || name.indexOf(query) !== -1;
-    var matchFilter = _discFilter === 'all'
-      || (_discFilter === 'managed'   && managed === 'managed')
-      || (_discFilter === 'unmanaged' && managed === 'unmanaged')
-      || sources.indexOf(_discFilter) !== -1;
-    var show = matchSearch && matchFilter;
-    card.style.display = show ? '' : 'none';
-    if (show) visible++;
-  });
-  var countEl = document.getElementById('discovery-count');
-  if (countEl) {
-    countEl.textContent = visible + ' record' + (visible !== 1 ? 's' : '');
-  }
-}
-
-function setDiscoveryFilter(filter, btn) {
-  _discFilter = filter;
-  document.querySelectorAll('.disc-filter-btn').forEach(function(b) {
-    b.classList.toggle('active', b === btn);
-  });
-  filterDiscovery();
 }
 
 (function () {
