@@ -27,7 +27,7 @@ side-by-side Managed | Discovered records layout, Alpine.js replacing
 | 3 | SSE broadcast infrastructure | `phase-3-sse.md` | ✅ |
 | 4 | Dashboard HTML rewrite | `phase-4-dashboard-html.md` | ✅ |
 | 5 | Visual refresh (all pages) | `phase-5-visual-refresh.md` | ✅ |
-| 6 | Cleanup & correctness | `phase-6-cleanup.md` | ⬜ |
+| 6 | Cleanup & correctness | `phase-6-cleanup.md` | ✅ |
 | 7 | Release prep | `phase-7-release.md` | ⬜ |
 
 ## Status legend

@@ -1,6 +1,6 @@
 # Phase 6 — Cleanup & Correctness
 
-## Status: ⬜ Not started
+## Status: ✅ Complete — commit `6bad275`
 
 ---
 
