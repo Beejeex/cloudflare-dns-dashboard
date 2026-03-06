@@ -16,6 +16,9 @@ apscheduler
 # File watcher
 watchdog
 
+# Server-Sent Events
+sse-starlette>=1.8
+
 # DNS domain parsing
 tldextract
 
