@@ -25,6 +25,7 @@ from routes.action_routes import router as action_router
 from routes.api_routes import router as api_router
 from routes.ui_routes import router as ui_router
 from scheduler import create_scheduler
+from services.broadcast_service import BroadcastService
 from watcher import create_observer
 
 # ---------------------------------------------------------------------------
@@ -83,6 +84,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Shared IP cache — populated by IpService; shared across all requests
     app.state.ip_cache = {"ip": None, "fetched_at": 0.0}
 
+    # SSE broadcaster — fan-out bus for all connected SSE clients
+    app.state.broadcaster = BroadcastService()
+
     # NOTE: UniFi controllers use self-signed certs so a dedicated client with
     # verify=False is kept for all UniFi calls rather than disabling SSL globally.
     unifi_http_client = httpx.AsyncClient(verify=False, timeout=10.0)
@@ -98,7 +102,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         config = config_repo.load()
         interval = config.interval
 
-    scheduler = create_scheduler(http_client=http_client, unifi_http_client=unifi_http_client, interval_seconds=interval)
+    scheduler = create_scheduler(
+        http_client=http_client,
+        unifi_http_client=unifi_http_client,
+        interval_seconds=interval,
+        broadcaster=app.state.broadcaster,
+    )
     scheduler.start()
     app.state.scheduler = scheduler
 

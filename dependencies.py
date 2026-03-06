@@ -19,6 +19,7 @@ from db.database import get_session
 from repositories.config_repository import ConfigRepository
 from repositories.record_config_repository import RecordConfigRepository
 from repositories.stats_repository import StatsRepository
+from services.broadcast_service import BroadcastService
 from services.config_service import ConfigService
 from services.dns_service import DnsService
 from services.ip_service import IpService
@@ -61,6 +62,22 @@ def get_unifi_http_client(request: Request) -> httpx.AsyncClient:
         The UniFi-specific httpx.AsyncClient.
     """
     return request.app.state.unifi_http_client
+
+
+def get_broadcaster(request: Request) -> BroadcastService:
+    """
+    Returns the shared BroadcastService stored on app.state.
+
+    The broadcaster is created once during the FastAPI lifespan and reused
+    for all requests so all SSE subscribers share the same fan-out bus.
+
+    Args:
+        request: The current FastAPI Request (injected automatically).
+
+    Returns:
+        The application-level BroadcastService instance.
+    """
+    return request.app.state.broadcaster
 
 
 # ---------------------------------------------------------------------------

@@ -24,7 +24,7 @@ side-by-side Managed | Discovered records layout, Alpine.js replacing
 | 0 | Create branch `feature/ui-v3` | — | ✅ |
 | 1 | Dependency additions | `phase-1-dependencies.md` | ✅ |
 | 2 | Backend performance fixes | `phase-2-backend-perf.md` | ✅ |
-| 3 | SSE broadcast infrastructure | `phase-3-sse.md` | ⬜ |
+| 3 | SSE broadcast infrastructure | `phase-3-sse.md` | ✅ |
 | 4 | Dashboard HTML rewrite | `phase-4-dashboard-html.md` | ⬜ |
 | 5 | Visual refresh (all pages) | `phase-5-visual-refresh.md` | ⬜ |
 | 6 | Cleanup & correctness | `phase-6-cleanup.md` | ⬜ |

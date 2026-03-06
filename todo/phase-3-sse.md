@@ -1,6 +1,6 @@
 # Phase 3 — SSE Broadcast Infrastructure
 
-## Status: ⬜ Not started
+## Status: ✅ Done
 
 ## Architecture
 
@@ -33,7 +33,7 @@ GET /api/events  ◄── browser SSE connection (EventSourceResponse)
 
 ## Tasks
 
-- [ ] **3.1** Create `services/broadcast_service.py`
+- [x] **3.1** Create `services/broadcast_service.py`
   - Class `BroadcastService`
   - Internal `set[asyncio.Queue[str]]` of subscriber queues
   - `subscribe() -> asyncio.Queue` — creates a new queue, adds to set, returns it
@@ -42,7 +42,7 @@ GET /api/events  ◄── browser SSE connection (EventSourceResponse)
   - Single instance stored on `app.state.broadcaster`
   - Module docstring SRP boundary: manages subscriber queues and event dispatch — does NOT fetch IP, render HTML, or touch the DB
 
-- [ ] **3.2** Add `GET /api/events` SSE endpoint to `routes/api_routes.py`
+- [x] **3.2** Add `GET /api/events` SSE endpoint to `routes/api_routes.py`
   - Uses `EventSourceResponse` from `sse-starlette`
   - Generator function yielding from the subscriber queue
   - **On connect**: immediately yield current IP (`ip_updated`) and current record HTML (`records_updated`) — zero wait period for fresh clients and SSE reconnects
@@ -50,23 +50,23 @@ GET /api/events  ◄── browser SSE connection (EventSourceResponse)
   - **Finally**: `broadcaster.unsubscribe(q)` always runs on disconnect
   - Inject `broadcaster` via `Depends(get_broadcaster)`, `dns_service` via `Depends(get_dns_service)`, `ip_service` via `Depends(get_ip_service)`
 
-- [ ] **3.3** Add `get_broadcaster` provider to `dependencies.py`
+- [x] **3.3** Add `get_broadcaster` provider to `dependencies.py`
   ```python
   def get_broadcaster(request: Request) -> BroadcastService:
       return request.app.state.broadcaster
   ```
 
-- [ ] **3.4** Wire scheduler to broadcaster in `scheduler.py`
+- [x] **3.4** Wire scheduler to broadcaster in `scheduler.py`
   - `create_scheduler()` gains parameter `broadcaster: BroadcastService`
   - After each `_ddns_check_job` completes: render the records HTML fragment and call `await broadcaster.publish("records_updated", html)`
   - After public IP is fetched: `await broadcaster.publish("ip_updated", json.dumps({"ip": current_ip}))`
   - After any log write: `await broadcaster.publish("log_appended", "{}")`
 
-- [ ] **3.5** Wire `POST /update-config` to broadcaster in `routes/action_routes.py`
+- [x] **3.5** Wire `POST /update-config` to broadcaster in `routes/action_routes.py`
   - After successful config save: re-render records fragment and call `await broadcaster.publish("records_updated", html)`
   - Reschedule (interval change) still happens before broadcast
 
-- [ ] **3.6** Initialize broadcaster and wire into scheduler in `app.py` lifespan
+- [x] **3.6** Initialize broadcaster and wire into scheduler in `app.py` lifespan
   ```python
   app.state.broadcaster = BroadcastService()
   # ... existing scheduler setup ...
