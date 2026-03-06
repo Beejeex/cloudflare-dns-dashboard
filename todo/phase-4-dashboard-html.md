@@ -1,8 +1,13 @@
 # Phase 4 — Dashboard HTML Rewrite
 
-## Status: ⬜ Not started
+## Status: ✅ Complete
 
-## Layout change
+- [x] **4.1** Rewrite `templates/dashboard.html` — 60/40 grid, SSE `records_container`, Alpine.js discovery filter, removed `filterDiscovery()`/`setDiscoveryFilter()` JS
+- [x] **4.2** Update navbar IP in `templates/base.html` — SSE swap on dashboard, one-shot load on other pages; body tag SSE ext wired conditionally
+- [x] **4.3** Update `routes/ui_routes.py` `dashboard()` — `fetch_zone_record_map()` + `get_bulk()` replace N per-record calls; `stats_service` → `stats_repo`
+- [x] **4.4** Update `routes/api_routes.py` `GET /api/records` — same bulk approach; `stats_service` → `stats_repo` in signature
+
+Commit: `6c8da2d`
 
 ```
 BEFORE
