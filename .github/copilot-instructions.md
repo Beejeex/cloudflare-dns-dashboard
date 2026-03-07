@@ -53,6 +53,7 @@ services/
     stats_service.py       # Tracks per-record update/failure counters
     config_service.py      # Reads and writes application config (delegates to repo)
     log_service.py         # Reads, filters, and parses log entries for the UI
+    broadcast_service.py   # SSE event broadcaster: pushes named events to connected clients
 
 repositories/
     config_repository.py         # SQLModel DB access for AppConfig table (load, save)
@@ -230,7 +231,9 @@ Use section comments in longer files to group related logic:
   ```html
   <script src="/static/htmx.min.js" defer></script>
   ```
-- Never reference HTMX from a CDN in production. The CDN link is only acceptable during local development before the file is downloaded.
+- The HTMX SSE extension is served from `/static/htmx-sse.js`. Load it after htmx.min.js with `hx-ext="sse"` on the `<body>` tag for SSE-connected pages.
+- Alpine.js is served from `/static/alpinejs.min.js`. Load it with `defer` after HTMX. Never reference Alpine from a CDN in production.
+- Never reference HTMX, Alpine, or any other JS dependency from a CDN in production.
 
 ---
 
@@ -569,9 +572,11 @@ All four locations must always be updated together. Missing any one will cause a
 | File | Location | What to change |
 |---|---|---|
 | `README.md` | Container Registry code block | Pinned tag line: `ghcr.io/beejeex/cloudflare-dns-dashboard:vX.Y.Z` |
-| `README.md` | Project Status table | Add new row; mark previous row as no longer **Current** |
+| `README.md` | Project Status table | Add new row; collapse old patch rows; mark previous row as no longer **Current** |
 | `shared_templates.py` | `APP_VERSION = "vX.Y.Z"` | String value |
 | `app.py` | `FastAPI(version="X.Y.Z", ...)` | Numeric string (no leading `v`) |
+
+Current version: **v2.1.0**
 
 Release order is mandatory:
 1. Update `README.md` for the new version and changes.
@@ -621,8 +626,8 @@ The visual design follows the same system used in `beejeex/madtracked`. Do not d
 
 ### Components
 - **Badges**: inline-block, `border-radius: 999px`, `font-size: 0.75rem`, `font-weight: 600`. Classes: `.badge-ok`, `.badge-warning`, `.badge-error`, `.badge-unifi` (violet), `.badge-k8s` (green).
-- **Discovery grid**: `display: grid; grid-template-columns: repeat(6, 1fr); gap: 1rem` — one card per hostname, source badges (CF/UniFi/K8s) and IPs shown inline.
-- **Managed record cards**: per-record controls include Cloudflare DDNS checkbox (dynamic/static IP mode) and UniFi DNS checkbox. UniFi section shows IP Address input (prefilled from `unifi_default_ip`) only when UniFi is checked.
+- **Unified discovery grid**: `display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem` — one card per hostname across both managed and unmanaged records. Toggle switch on each card (green = managed, gray = unmanaged) posts to `/remove-from-managed` or `/add-to-managed` respectively.
+- **Managed record cards**: green border, toggle ON. Per-record expandable config panel includes Cloudflare DDNS checkbox (dynamic/static IP mode) and UniFi DNS checkbox. UniFi section shows IP Address input (prefilled from `unifi_default_ip`) only when UniFi is checked.
 - **Stat cards**: CSS grid using `.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }`. Value in `2rem 700` weight.
 - **Tables**: `font-size: 0.875rem`, `th` uppercase + `letter-spacing: 0.05em`, row hover `#f8fafc`.
 - **Forms**: `.form-group` spacing, `label` `0.85rem` `#475569`, all inputs full-width with `0.5rem 0.75rem` padding.
@@ -632,8 +637,10 @@ The visual design follows the same system used in `beejeex/madtracked`. Do not d
 All styles live in `templates/base.html` `<style>` block. Do not add Tailwind, Bootstrap, or any CDN CSS link.
 
 ### HTMX patterns in templates
-- Log tail: `hx-get="/api/logs/recent" hx-trigger="load, every 5s" hx-swap="innerHTML"`
-- Destructive actions: always include `hx-confirm="..."` attribute.
+- Log tail: `hx-get="/api/logs/recent" hx-trigger="load, sse:log_appended" hx-swap="innerHTML"` — SSE push replaces timer polling; no `every Ns` trigger.
+- Destructive actions: always include `hx-confirm="..."` attribute. The global `htmx:confirm` handler in `base.html` shows a custom modal — guard it with `if (!evt.detail.question) return` because HTMX v1 fires the event for **every** request, not only confirmed ones.
+- Dashboard write actions (`/add-to-managed`, `/remove-from-managed`, etc.) use `hx-swap="none"` and rely on a JS `safeReload()` call in `htmx:afterRequest` to refresh the unified grid. Partial fragment swaps are not used here because the grid reorders cards.
+- `safeReload()` must close the SSE `EventSource` via `htmx.getInternalData(el).sseEventSource.close()` before calling `location.reload()` to avoid a spurious browser error event.
 - Loading indicators: `<span class="htmx-indicator">loading…</span>` with `.htmx-indicator { opacity:0; transition: opacity 0.15s; }` and `.htmx-request.htmx-indicator { opacity:1; }`.
 - Partial swaps target the narrowest possible element — never `hx-target="body"` except for full-page resets.
 

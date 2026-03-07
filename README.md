@@ -217,22 +217,12 @@ ghcr.io/beejeex/cloudflare-dns-dashboard:v2.1.0      # pinned release
 |---|---|
 | `v1.x` | Legacy Flask app — archived |
 | `v2.0.13` | FastAPI rewrite with UniFi + Kubernetes integration |
-| `v2.0.14` | Managed records redesigned as full-width rows with expandable config panel |
-| `v2.0.15` | Fix UniFi .local policy name to preserve full subdomain structure |
-| `v2.0.16` | Fixed badge column alignment; added per-record clear-failures button |
-| `v2.0.17` | Dashboard live-refresh every 30s (records table + stat cards) without full page reload |
-| `v2.0.18` | UniFi-only records now stamp last_checked timestamp on each sync cycle |
-| `v2.0.19` | Auto-reset failure counter on recovery; removed Total Updates/Failures stat cards |
-| `v2.0.20` | Hide Cloudflare IP column for records that have Cloudflare disabled |
-| `v2.0.21` | Reset button moved to updates counter; failures show count-only (auto-reset on recovery) |
-| `v2.0.22` | Remove private domain name from public source code |
-| `v2.0.23` | New managed records default all checkboxes off |
-| `v2.0.24` | UniFi .local discovery merge fix; delete buttons on unmanaged cards; 3-checkbox UniFi panel |
-| `v2.0.25` | Sync Now button; zone-based FQDN reconstruction for orphaned .local policies |
-| `v2.0.26` | Color-coded rip-labels per service; K8s Ingress shown in managed record rows |
-| `v2.0.27` | Discovery search + filter bar; multi-service badges; fix create-record error handling |
-| `v2.0.28` | Status badge colors now match per-service source badge colors (CF=sky, UniFi=violet) |
-| `v2.1.0` | **Current** — Unified discovery grid, toggle switches for managed/unmanaged, custom confirm modal, SSE-driven log updates, UniFi single-fetch sync, visual refresh (uniform stat card colors, inline SVG favicon) |
+| `v2.0.17` | Dashboard live-refresh; expandable per-record config panels |
+| `v2.0.24` | UniFi `.local` discovery; per-record 3-checkbox UniFi panel |
+| `v2.0.25` | Sync Now button; zone-based FQDN reconstruction for orphaned `.local` policies |
+| `v2.0.27` | Discovery search + filter bar; multi-service badges |
+| `v2.0.28` | Per-service badge colors; K8s Ingress shown in managed rows |
+| `v2.1.0` | **Current** — Unified discovery grid, toggle switches, custom confirm modal, SSE-driven updates, Alpine.js interactivity, UniFi single-fetch sync |
 
 This is **beta software**. The database schema may change between minor versions. Pin to a specific image tag in production.
 
