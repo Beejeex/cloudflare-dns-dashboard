@@ -17,17 +17,17 @@ from dependencies import (
     get_kubernetes_service,
     get_log_service,
     get_record_config_repo,
-    get_stats_service,
+    get_stats_repo,
     get_unifi_client,
 )
 from exceptions import DnsProviderError, IpFetchError, KubernetesError, UnifiProviderError
 from cloudflare.unifi_client import UnifiClient
 from repositories.record_config_repository import RecordConfigRepository
+from repositories.stats_repository import StatsRepository
 from services.config_service import ConfigService
 from services.dns_service import DnsService
 from services.kubernetes_service import KubernetesService
 from services.log_service import LogService
-from services.stats_service import StatsService
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ async def dashboard(
     request: Request,
     config_service: ConfigService = Depends(get_config_service),
     dns_service: DnsService = Depends(get_dns_service),
-    stats_service: StatsService = Depends(get_stats_service),
+    stats_repo: StatsRepository = Depends(get_stats_repo),
     kubernetes_service: KubernetesService = Depends(get_kubernetes_service),
     unifi_client: UnifiClient = Depends(get_unifi_client),
     record_config_repo: RecordConfigRepository = Depends(get_record_config_repo),
@@ -140,16 +140,21 @@ async def dashboard(
             k8s_error = str(exc)
     k8s_by_hostname = {r.hostname: r for r in k8s_records}
 
-    for record_name in managed_records:
-        dns_record = None
+    # Bulk-fetch all DNS records (one call per zone) and stats (one DB query)
+    # instead of N individual lookups — significant speedup with many managed records.
+    zone_record_map: dict = {}
+    if not api_error:
         try:
-            dns_record = await dns_service.check_single_record(record_name, zones)
+            zone_record_map = await dns_service.fetch_zone_record_map(managed_records, zones)
         except DnsProviderError as exc:
-            logger.warning("Could not fetch DNS record %s: %s", record_name, exc)
-            if not api_error:
-                api_error = str(exc)
+            logger.warning("Could not bulk-fetch zone records for dashboard: %s", exc)
+            api_error = str(exc)
 
-        stats = await stats_service.get_for_record(record_name)
+    stats_bulk = stats_repo.get_bulk(managed_records)
+
+    for record_name in managed_records:
+        dns_record = zone_record_map.get(record_name)
+        stats = stats_bulk.get(record_name)
         dns_ip = dns_record.content if dns_record else "Not Found"
         rc = record_configs.get(record_name)
         cf_enabled = rc.cf_enabled if rc else True
@@ -340,7 +345,7 @@ async def logs_page(
     Returns:
         An HTMLResponse rendering templates/logs.html.
     """
-    recent_logs = log_service.get_recent(limit=200)
+    recent_logs = log_service.get_recent(limit=100)
     refresh = await config_service.get_refresh_interval()
     return templates.TemplateResponse(
         request,

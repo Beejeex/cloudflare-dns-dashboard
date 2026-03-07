@@ -36,6 +36,27 @@ class ConfigService:
             config_repo: An initialised ConfigRepository for the current session.
         """
         self._repo = config_repo
+        # Request-scoped cache — populated on first read; invalidated on any write
+        self._config: AppConfig | None = None
+
+    # ---------------------------------------------------------------------------
+    # Internal helpers
+    # ---------------------------------------------------------------------------
+
+    def _load(self) -> AppConfig:
+        """
+        Returns the cached AppConfig for this request, loading from DB if needed.
+
+        All read methods call this instead of self._repo.load() directly so that
+        the ConfigRepository is only hit once per request regardless of how many
+        service methods the handler calls.
+
+        Returns:
+            The AppConfig ORM instance.
+        """
+        if self._config is None:
+            self._config = self._repo.load()
+        return self._config
 
     # ---------------------------------------------------------------------------
     # Read operations
@@ -48,7 +69,7 @@ class ConfigService:
         Returns:
             The AppConfig ORM instance.
         """
-        return self._repo.load()
+        return self._load()
 
     async def get_api_token(self) -> str:
         """
@@ -57,8 +78,7 @@ class ConfigService:
         Returns:
             The API token string, or an empty string if not configured.
         """
-        config = self._repo.load()
-        return config.api_token
+        return self._load().api_token
 
     async def get_zones(self) -> dict[str, str]:
         """
@@ -68,8 +88,7 @@ class ConfigService:
             A dict mapping base domain strings to Cloudflare zone IDs,
             e.g. {"example.com": "zone_id_abc123"}.
         """
-        config = self._repo.load()
-        return self._repo.get_zones(config)
+        return self._repo.get_zones(self._load())
 
     async def get_managed_records(self) -> list[str]:
         """
@@ -78,8 +97,7 @@ class ConfigService:
         Returns:
             A list of fully-qualified DNS names, e.g. ["home.example.com"].
         """
-        config = self._repo.load()
-        return self._repo.get_records(config)
+        return self._repo.get_records(self._load())
 
     async def get_refresh_interval(self) -> int:
         """
@@ -88,8 +106,7 @@ class ConfigService:
         Returns:
             The interval as an integer number of seconds.
         """
-        config = self._repo.load()
-        return config.refresh
+        return self._load().refresh
 
     async def get_check_interval(self) -> int:
         """
@@ -98,8 +115,7 @@ class ConfigService:
         Returns:
             The interval as an integer number of seconds.
         """
-        config = self._repo.load()
-        return config.interval
+        return self._load().interval
 
     async def get_k8s_enabled(self) -> bool:
         """
@@ -108,8 +124,7 @@ class ConfigService:
         Returns:
             True if the feature is enabled, False otherwise.
         """
-        config = self._repo.load()
-        return config.k8s_enabled
+        return self._load().k8s_enabled
 
     async def get_unifi_config(self) -> tuple[str, str, str, str, bool]:
         """
@@ -118,7 +133,7 @@ class ConfigService:
         Returns:
             A tuple of (host, api_key, site_id, default_ip, enabled).
         """
-        config = self._repo.load()
+        config = self._load()
         return (
             config.unifi_host,
             config.unifi_api_key,
@@ -134,8 +149,7 @@ class ConfigService:
         Returns:
             A dict of section-name to boolean visibility flags.
         """
-        config = self._repo.load()
-        return self._repo.get_ui_state(config)
+        return self._repo.get_ui_state(self._load())
 
     # ---------------------------------------------------------------------------
     # Write operations
@@ -185,6 +199,8 @@ class ConfigService:
         config.unifi_default_ip = unifi_default_ip
         config.unifi_enabled = unifi_enabled
         self._repo.save(config)
+        # Invalidate cache so subsequent reads within this request see the new values
+        self._config = None
         logger.info("Credentials and intervals updated.")
         return config
 
@@ -207,6 +223,7 @@ class ConfigService:
         records.append(record_name)
         self._repo.set_records(config, records)
         self._repo.save(config)
+        self._config = None
         logger.info("Added managed record: %s", record_name)
         return True
 
@@ -229,6 +246,7 @@ class ConfigService:
         records.remove(record_name)
         self._repo.set_records(config, records)
         self._repo.save(config)
+        self._config = None
         logger.info("Removed managed record: %s", record_name)
         return True
 
@@ -245,3 +263,4 @@ class ConfigService:
         config = self._repo.load()
         self._repo.set_ui_state(config, ui_state)
         self._repo.save(config)
+        self._config = None

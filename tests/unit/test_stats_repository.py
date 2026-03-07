@@ -100,3 +100,56 @@ def test_get_all_returns_all_rows(db_session):
     all_stats = repo.get_all()
     assert len(all_stats) == 2
     assert all_stats[0].record_name == "a.example.com"
+
+
+# ---------------------------------------------------------------------------
+# get_bulk
+# ---------------------------------------------------------------------------
+
+
+def test_get_bulk_returns_dict_keyed_by_fqdn(db_session):
+    """get_bulk must return a dict mapping each found FQDN to its RecordStats."""
+    repo = StatsRepository(db_session)
+    repo.get_or_create("a.example.com")
+    repo.get_or_create("b.example.com")
+
+    result = repo.get_bulk(["a.example.com", "b.example.com"])
+
+    assert set(result.keys()) == {"a.example.com", "b.example.com"}
+    assert result["a.example.com"].record_name == "a.example.com"
+    assert result["b.example.com"].record_name == "b.example.com"
+
+
+def test_get_bulk_omits_unknown_names(db_session):
+    """get_bulk must silently omit names that have no row; no KeyError raised."""
+    repo = StatsRepository(db_session)
+    repo.get_or_create("a.example.com")
+
+    result = repo.get_bulk(["a.example.com", "nonexistent.example.com"])
+
+    assert "a.example.com" in result
+    assert "nonexistent.example.com" not in result
+
+
+def test_get_bulk_empty_list_returns_empty_dict(db_session):
+    """get_bulk([]) must return an empty dict without touching the DB."""
+    repo = StatsRepository(db_session)
+    repo.get_or_create("a.example.com")
+
+    result = repo.get_bulk([])
+
+    assert result == {}
+
+
+def test_get_bulk_single_call_returns_multiple_rows(db_session):
+    """get_bulk must retrieve all requested rows in a single call."""
+    repo = StatsRepository(db_session)
+    names = [f"host{i}.example.com" for i in range(5)]
+    for name in names:
+        repo.get_or_create(name)
+
+    result = repo.get_bulk(names)
+
+    assert len(result) == 5
+    for name in names:
+        assert name in result

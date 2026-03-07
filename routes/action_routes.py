@@ -64,6 +64,8 @@ async def update_config(
     discovery toggle, and UniFi integration settings.
 
     HTMX swaps the returned fragment into #config-status on the page.
+    After saving, publishes a ``records_updated`` SSE event so all open
+    browser tabs reflect the config change without a manual refresh.
 
     Args:
         request: The incoming FastAPI request.
@@ -109,6 +111,12 @@ async def update_config(
     )
 
     log_service.log("Cloudflare configuration updated.", level="INFO")
+
+    # Publish a records_updated signal so all SSE clients refresh their view
+    broadcaster = getattr(request.app.state, "broadcaster", None)
+    if broadcaster is not None:
+        broadcaster.publish("records_updated", "")
+        broadcaster.publish("log_appended", "{}")
 
     return templates.TemplateResponse(
         request,

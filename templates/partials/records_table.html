@@ -1,25 +1,49 @@
-﻿{%- if records -%}{%- for r in records -%}
+﻿{%- if records -%}
+<div class="discovery-grid">
+{%- for r in records -%}
 {%- set slug = r.name | replace('.', '-') | replace('_', '-') -%}
-<div class="record-row{%- if r.cfg_cf_enabled -%}
-    {%- if r.failures > 0 and r.is_up_to_date is not none and not r.is_up_to_date %} accent-error
-    {%- elif r.is_up_to_date %} accent-cf-ok
-    {%- elif r.is_up_to_date is none %} accent-cf
-    {%- else %} accent-cf-warn{%- endif -%}
-  {%- elif r.cfg_unifi_enabled or r.cfg_unifi_local_enabled -%}
-    {%- set unifi_target = r.cfg_unifi_static_ip or unifi_default_ip or '' -%}
-    {%- if r.unifi_ip and r.unifi_ip == unifi_target %} accent-unifi-ok{%- else %} accent-unifi{%- endif -%}
-  {%- endif %}">
+{%- if r.cfg_cf_enabled -%}
+  {%- if r.failures > 0 and r.is_up_to_date is not none and not r.is_up_to_date -%}{%- set accent = '#dc2626' -%}
+  {%- elif r.is_up_to_date -%}{%- set accent = '#16a34a' -%}
+  {%- elif r.is_up_to_date is none -%}{%- set accent = '#0284c7' -%}
+  {%- else -%}{%- set accent = '#f59e0b' -%}
+  {%- endif -%}
+{%- elif r.cfg_unifi_enabled or r.cfg_unifi_local_enabled -%}
+  {%- set unifi_target = r.cfg_unifi_static_ip or unifi_default_ip or '' -%}
+  {%- if r.unifi_ip and r.unifi_ip == unifi_target -%}{%- set accent = '#16a34a' -%}
+  {%- else -%}{%- set accent = '#7c3aed' -%}
+  {%- endif -%}
+{%- else -%}{%- set accent = '#cbd5e1' -%}
+{%- endif -%}
+<div x-data="{ expanded: false, menu: false }"
+     style="border:1px solid #e2e8f0; border-left:4px solid {{ accent }}; border-radius:0.5rem;
+            box-shadow:0 1px 4px rgba(0,0,0,0.04); transition:box-shadow 0.15s;"
+     onmouseenter="this.style.boxShadow='0 2px 10px rgba(0,0,0,0.08)'"
+     onmouseleave="this.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'"
+>
 
-  {# ── Main row: name | badge | IPs | stats | buttons ── #}
-  <div class="record-row-main">
 
-    {# Record name #}
-    <div class="record-row-name">
-      <span class="record-name font-mono">{{ r.name }}</span>
+  {# ── Card content ── #}
+  <div style="padding:0.85rem 1rem 1rem; display:flex; flex-direction:column; gap:0.45rem; background:#fff; position:relative;">
+
+    {# ⋯ button anchored to top-right corner #}
+    <div class="card-menu-anchor" @click.outside="menu = false">
+      <button type="button" @click.stop="menu = !menu" class="btn-dots" title="Actions">&#8943;</button>
+      <div x-show="menu" x-cloak class="card-menu" style="top:calc(100% + 4px); right:0;">
+        <button type="button" class="card-menu-item"
+                @click="expanded = true; menu = false">&#9881;&hairsp; Configure</button>
+        <div class="card-menu-divider"></div>
+        <form hx-post="/remove-from-managed" hx-target="#records-container" hx-swap="innerHTML"
+              hx-confirm="Remove {{ r.name }} from managed? DNS record stays in Cloudflare."
+              data-reload-on-success="true">
+          <input type="hidden" name="record_name" value="{{ r.name }}">
+          <button type="submit" class="card-menu-item card-menu-item-danger">&#x2715;&hairsp; Remove</button>
+        </form>
+      </div>
     </div>
 
-    {# Status badges — one per active service, color always matches source badge color #}
-    <div class="record-row-badge">
+    {# Source badges #}
+    <div class="discovery-card-top">
       {% if r.cfg_cf_enabled %}
         {% if r.is_up_to_date is none %}
           <span class="badge badge-cf" style="opacity:0.6;">CF unknown</span>
@@ -44,37 +68,39 @@
       {% endif %}
     </div>
 
-    {# Compact IP blocks #}
-    <div class="record-row-ips">
+    {# Record name #}
+    <div class="discovery-card-name font-mono">{{ r.name }}</div>
+
+    {# IP lines — one per active source, matching discovery card style #}
+    <div class="discovery-card-meta" style="display:flex; flex-direction:column; gap:0.15rem;">
       {% if r.cfg_cf_enabled %}
-      <div class="rip-col">
-        <span class="rip-label rip-label-cf">Cloudflare</span>
-        <span class="rip-value font-mono">{{ r.dns_ip }}</span>
-      </div>
+        <span>
+          <span class="badge badge-cf" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">CF</span>
+          <span class="font-mono"> {{ r.dns_ip or '—' }}</span>
+        </span>
       {% endif %}
       {% if unifi_enabled and (r.unifi_ip or r.cfg_unifi_enabled) %}
-      <div class="rip-col">
-        <span class="rip-label rip-label-unifi">UniFi</span>
-        <span class="rip-value font-mono">{{ r.unifi_ip or '—' }}</span>
-      </div>
+        <span>
+          <span class="badge badge-unifi" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">UniFi</span>
+          <span class="font-mono"> {{ r.unifi_ip or '—' }}</span>
+        </span>
       {% endif %}
       {% if unifi_enabled and (r.unifi_local_ip or r.cfg_unifi_local_enabled) %}
-      <div class="rip-col">
-        <span class="rip-label rip-label-unifi">UniFi .local</span>
-        <span class="rip-value font-mono">{{ r.unifi_local_ip or '—' }}</span>
-      </div>
+        <span>
+          <span class="badge badge-unifi" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">UniFi.local</span>
+          <span class="font-mono"> {{ r.unifi_local_ip or '—' }}</span>
+        </span>
       {% endif %}
       {% if r.k8s_namespace %}
-      <div class="rip-col">
-        <span class="rip-label rip-label-k8s">K8s Ingress</span>
-        <span class="rip-value" title="{{ r.k8s_ingress_name }} / {{ r.k8s_namespace }}"
-              style="font-size:0.775rem; color:#475569;">{{ r.k8s_namespace }}/{{ r.k8s_ingress_name }}</span>
-      </div>
+        <span>
+          <span class="badge badge-k8s" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">K8s</span>
+          {{ r.k8s_namespace }}/{{ r.k8s_ingress_name }}
+        </span>
       {% endif %}
     </div>
 
-    {# Stats #}
-    <div class="record-row-stats">
+    {# Stats — updates × failures + last-checked timestamp #}
+    <div style="font-size:0.78rem; color:#64748b; line-height:1.5;">
       {{ r.updates }} update{{ 's' if r.updates != 1 else '' }}
       <form hx-post="/reset-updates" hx-target="#records-container" hx-swap="innerHTML" style="display:inline;">
         <input type="hidden" name="record_name" value="{{ r.name }}">
@@ -88,31 +114,60 @@
                 hx-swap="innerHTML"
                 onclick="toggleErrorLog('{{ slug }}')"
                 title="Click to see error log">
-          <span style="color:#dc2626;">{{ r.failures }} failure{{ 's' if r.failures != 1 else '' }}</span> <span style="font-size:0.65rem;">&#9660;</span>
+          <span style="color:#dc2626;">{{ r.failures }} failure{{ 's' if r.failures != 1 else '' }}</span>
+          <span style="font-size:0.65rem;">&#9660;</span>
         </button>
       {% else %}0 failures{% endif %}
       {% if r.last_checked %}<br><span style="color:#94a3b8;">{{ r.last_checked[:16] }}</span>{% endif %}
     </div>
 
-    {# Action buttons #}
-    <div class="record-row-btns">
-      <button type="button" id="cfg-btn-{{ slug }}" class="btn-icon"
-              onclick="toggleRowConfig('{{ slug }}')" title="Configure">&#9881;</button>
-      <form hx-post="/remove-from-managed" hx-target="#records-container" hx-swap="innerHTML"
-            hx-confirm="Remove {{ r.name }} from managed? DNS record stays in Cloudflare."
-            hx-on:htmx:after-request="if(event.detail.successful) location.reload()" style="display:inline">
-        <input type="hidden" name="record_name" value="{{ r.name }}">
-        <button type="submit" class="btn btn-ghost btn-sm">Remove</button>
-      </form>
-    </div>
+  </div>{# end card content #}
 
-  </div>{# end .record-row-main #}
-
-  {# ── Inline error log — shown when user clicks the failure counter ── #}
+  {# ── Inline error log — shown when user clicks failure counter ── #}
   <div class="record-error-panel" id="record-errors-{{ slug }}" style="display:none;"></div>
 
-  {# ── Expandable config panel — shown/hidden by ⚙ button ── #}
-  <div class="record-row-config" id="row-config-{{ slug }}" style="display:none;">
+  {# ── Config modal — teleported to <body> so it overlays the whole page ── #}
+  <template x-teleport="body">
+    <div x-show="expanded" x-cloak
+         class="modal-overlay"
+         @keydown.escape.window="expanded = false">
+      {# Backdrop #}
+      <div style="position:absolute; inset:0; background:rgba(15,23,42,0.45);" @click="expanded = false"></div>
+      {# Panel #}
+      <div style="position:relative; z-index:1; background:#fff; border-radius:0.75rem;
+                  box-shadow:0 20px 60px rgba(0,0,0,0.25); width:min(520px,95vw);
+                  max-height:88vh; overflow-y:auto; border-left:4px solid {{ accent }};">
+        {# Modal header #}
+        <div style="display:flex; align-items:center; justify-content:space-between;
+                    padding:0.85rem 1.25rem; border-bottom:1px solid #f1f5f9;
+                    position:sticky; top:0; background:#fff; z-index:1;">
+          <span style="font-weight:700; color:#1e293b; font-size:0.95rem;">&#9881; {{ r.name }}</span>
+          <button type="button" @click="expanded = false"
+                  style="background:none; border:none; cursor:pointer; font-size:1.35rem; color:#94a3b8;
+                         line-height:1; padding:0.1rem 0.45rem; border-radius:0.375rem; transition:background 0.1s;"
+                  onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background=''">&times;</button>
+        </div>
+        {# Modal body — config form. Scoped Alpine state tracks all toggle visibility. #}
+        <div style="padding:1.25rem;"
+             x-data="{
+               cfOn:     {{ 'true' if r.cfg_cf_enabled else 'false' }},
+               staticOn: {{ 'true' if r.cfg_ip_mode == 'static' else 'false' }},
+               unifiOn:  {{ 'true' if (r.cfg_unifi_enabled or r.cfg_unifi_local_enabled) else 'false' }},
+               parentOn: {{ 'true' if r.cfg_unifi_enabled else 'false' }},
+               localOn:  {{ 'true' if r.cfg_unifi_local_enabled else 'false' }},
+               toggleUnifiMaster(v) {
+                 this.unifiOn = v;
+                 if (!v) { this.parentOn = false; this.localOn = false; }
+               },
+               toggleParent(v) {
+                 this.parentOn = v;
+                 if (v) this.unifiOn = true;
+               },
+               toggleLocal(v) {
+                 this.localOn = v;
+                 if (v) this.unifiOn = true;
+               }
+             }">
     <form id="cfg-form-{{ slug }}"
           hx-post="/update-record-config"
           hx-target="#cfg-status-{{ slug }}"
@@ -126,29 +181,26 @@
           <label class="record-cfg-toggle">
             <input type="checkbox" name="cf_enabled" value="on"
                    {% if r.cfg_cf_enabled %}checked{% endif %}
-                   onchange="toggleCfSection('{{ slug }}', this.checked)">
+                   @change="cfOn = $event.target.checked">
             <span style="font-weight:600; color:#0284c7;">Cloudflare DDNS</span>
           </label>
-          <div id="cf-section-{{ slug }}"
-               style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.4rem; margin-top:0.4rem;
-                      {% if not r.cfg_cf_enabled %}opacity:0.4; pointer-events:none;{% endif %}">
+          <div :style="cfOn ? '' : 'opacity:0.4; pointer-events:none;'"
+               style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.4rem; margin-top:0.4rem;">
             <div style="display:flex; gap:1rem;">
               <label class="record-cfg-radio">
                 <input type="radio" name="ip_mode" value="dynamic"
-                       {% if r.cfg_ip_mode == 'dynamic' %}checked{% endif %}
-                       onchange="toggleStaticIp('{{ slug }}', false)">
+                       {% if r.cfg_ip_mode != 'static' %}checked{% endif %}
+                       @change="staticOn = false">
                 <span>Dynamic <span class="text-muted" style="font-size:0.75rem;">(auto-detect)</span></span>
               </label>
               <label class="record-cfg-radio">
                 <input type="radio" name="ip_mode" value="static"
                        {% if r.cfg_ip_mode == 'static' %}checked{% endif %}
-                       onchange="toggleStaticIp('{{ slug }}', true)">
+                       @change="staticOn = true">
                 <span>Static</span>
               </label>
             </div>
-            <div id="static-ip-wrap-{{ slug }}"
-                 style="display:flex; align-items:center; gap:0.5rem;
-                        visibility:{% if r.cfg_ip_mode == 'static' %}visible{% else %}hidden{% endif %};">
+            <div x-show="staticOn" style="display:flex; align-items:center; gap:0.5rem;">
               <label style="font-size:0.8rem; color:#475569; white-space:nowrap; width:70px;">IP Address</label>
               <input type="text" name="static_ip" value="{{ r.cfg_static_ip }}" placeholder="203.0.113.1"
                      style="width:160px; font-size:0.8125rem; padding:0.3rem 0.6rem; border:1px solid #cbd5e1; border-radius:0.375rem;">
@@ -159,27 +211,24 @@
         {% if unifi_enabled %}
         {# UniFi DNS section — master toggle + two independent sub-checkboxes #}
         <div class="row-config-section">
-          {# Master toggle: JS-only, no form field. Checked when either sub-box is on. #}
           <label class="record-cfg-toggle">
-            <input type="checkbox" id="unifi-master-{{ slug }}"
-                   {% if r.cfg_unifi_enabled or r.cfg_unifi_local_enabled %}checked{% endif %}
-                   onchange="toggleUnifiMaster('{{ slug }}', this.checked)">
+            <input type="checkbox"
+                   :checked="unifiOn"
+                   @change="toggleUnifiMaster($event.target.checked)">
             <span style="font-weight:600; color:#7c3aed;">UniFi DNS</span>
           </label>
-          <div id="unifi-detail-{{ slug }}"
-               style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.5rem; margin-top:0.4rem;
-                      {% if not r.cfg_unifi_enabled and not r.cfg_unifi_local_enabled %}opacity:0.4; pointer-events:none;{% endif %}">
+          <div :style="unifiOn ? '' : 'opacity:0.4; pointer-events:none;'"
+               style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.5rem; margin-top:0.4rem;">
 
-            {# Sub-checkbox 1: parent record (unifi_enabled) #}
+            {# Sub-checkbox 1: parent record #}
             <label class="record-cfg-toggle">
-              <input type="checkbox" id="unifi-parent-cb-{{ slug }}" name="unifi_enabled" value="on"
-                     {% if r.cfg_unifi_enabled %}checked{% endif %}
-                     onchange="toggleUnifiParent('{{ slug }}', this.checked)">
+              <input type="checkbox" name="unifi_enabled" value="on"
+                     :checked="parentOn"
+                     @change="toggleParent($event.target.checked)">
               <span style="font-size:0.875rem; color:#7c3aed;">Enable parent record</span>
             </label>
-            <div id="unifi-parent-detail-{{ slug }}"
-                 style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.35rem;
-                        {% if not r.cfg_unifi_enabled %}display:none;{% endif %}">
+            <div x-show="parentOn"
+                 style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.35rem;">
               <div style="display:flex; align-items:center; gap:0.5rem;">
                 <label style="font-size:0.8rem; color:#475569; white-space:nowrap; width:70px;">IP Address</label>
                 <input type="text" name="unifi_static_ip"
@@ -193,16 +242,15 @@
               </span>
             </div>
 
-            {# Sub-checkbox 2: .local record (unifi_local_enabled) #}
+            {# Sub-checkbox 2: .local record #}
             <label class="record-cfg-toggle">
-              <input type="checkbox" id="unifi-local-cb-{{ slug }}" name="unifi_local_enabled" value="on"
-                     {% if r.cfg_unifi_local_enabled %}checked{% endif %}
-                     onchange="toggleUnifiLocal('{{ slug }}', this.checked)">
+              <input type="checkbox" name="unifi_local_enabled" value="on"
+                     :checked="localOn"
+                     @change="toggleLocal($event.target.checked)">
               <span style="font-size:0.875rem; color:#7c3aed;">Enable .local record</span>
             </label>
-            <div id="unifi-local-detail-{{ slug }}"
-                 style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.35rem;
-                        {% if not r.cfg_unifi_local_enabled %}display:none;{% endif %}">
+            <div x-show="localOn"
+                 style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.35rem;">
               <div style="display:flex; align-items:center; gap:0.5rem;">
                 <label style="font-size:0.8rem; color:#475569; white-space:nowrap; width:70px;">.local IP</label>
                 <input type="text" name="unifi_local_static_ip"
@@ -220,21 +268,25 @@
         </div>
         {% endif %}
 
-        {# Save-status indicator #}
-        <div style="margin-left:auto; align-self:flex-start; padding-top:0.15rem;">
-          <span id="cfg-status-{{ slug }}" class="text-sm text-muted"></span>
-        </div>
-
       </div>{# end .row-config-sections #}
-    </form>
-  </div>{# end .record-row-config #}
 
-</div>{# end .record-row #}
+      {# Save-status indicator — full-width row below both columns #}
+      <div class="cfg-status-row">
+        <span id="cfg-status-{{ slug }}" class="text-sm text-muted"></span>
+      </div>
+    </form>
+        </div>{# end modal body / x-data #}
+      </div>{# end modal panel #}
+    </div>{# end modal overlay #}
+  </template>{# end x-teleport #}
+
+</div>{# end x-data wrapper #}
 {%- endfor %}
 {%- if error_message is defined and error_message %}
 <div style="background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; padding:0.75rem 1.25rem;
      border-radius:0.375rem; font-size:0.875rem; margin-top:0.25rem;">{{ error_message }}</div>
 {% endif %}
+</div>{# end discovery-grid #}
 {%- else %}
 <div style="padding:1.25rem; color:#94a3b8; font-size:0.875rem;">No records managed yet. Use the form below to create and manage records.</div>
 {%- endif %}

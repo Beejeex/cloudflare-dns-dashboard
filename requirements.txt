@@ -16,14 +16,14 @@ apscheduler
 # File watcher
 watchdog
 
+# Server-Sent Events
+sse-starlette>=1.8
+
 # DNS domain parsing
 tldextract
 
 # Kubernetes cluster API client
 kubernetes
-
-# Async file I/O
-aiofiles
 
 # Testing
 pytest

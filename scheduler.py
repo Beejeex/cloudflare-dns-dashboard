@@ -9,14 +9,17 @@ Does NOT: contain DNS business logic, config reading, or HTTP calls directly
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlmodel import Session
 
 from cloudflare.cloudflare_client import CloudflareClient
+from cloudflare.dns_provider import DnsRecord
 from cloudflare.unifi_client import UnifiClient
 from db.database import engine
 from exceptions import UnifiProviderError
@@ -28,6 +31,9 @@ from services.dns_service import DnsService
 from services.ip_service import IpService
 from services.log_service import LogService
 from services.stats_service import StatsService
+
+if TYPE_CHECKING:
+    from services.broadcast_service import BroadcastService
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +70,11 @@ def _to_local_policy_name(record_name: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-async def _ddns_check_job(http_client: httpx.AsyncClient, unifi_http_client: httpx.AsyncClient) -> None:
+async def _ddns_check_job(
+    http_client: httpx.AsyncClient,
+    unifi_http_client: httpx.AsyncClient,
+    broadcaster: BroadcastService | None = None,
+) -> None:
     """
     APScheduler job: runs one DDNS check cycle and optional log cleanup.
 
@@ -76,9 +86,16 @@ async def _ddns_check_job(http_client: httpx.AsyncClient, unifi_http_client: htt
     whose RecordConfig has unifi_enabled=True, creating or updating the
     corresponding UniFi DNS policy.
 
+    After the full cycle completes, publishes SSE events via BroadcastService
+    when one is provided:
+    - ``ip_updated``      — current public IP JSON
+    - ``records_updated`` — records-table HTML fragment (stats-only; no live CF call)
+    - ``log_appended``    — empty signal to trigger log panel refresh
+
     Args:
         http_client: The long-lived shared httpx.AsyncClient from app.state.
         unifi_http_client: The UniFi-specific client (verify=False) from app.state.
+        broadcaster: Optional BroadcastService to push SSE events after the cycle.
 
     Returns:
         None
@@ -128,6 +145,19 @@ async def _ddns_check_job(http_client: httpx.AsyncClient, unifi_http_client: htt
                 f"UniFi pass: syncing {len(unifi_enabled_records)} of {len(records)} record(s) to {config.unifi_host}.",
                 level="INFO",
             )
+            # NOTE: Fetch ALL existing policies in ONE call here, then do dict
+            # lookups per record. Without this, each get_record() triggers a
+            # separate GET /dns/policies, causing a burst that returns 502s.
+            try:
+                _all_policies = await unifi_client.list_records(config.unifi_site_id)
+                existing_policies: dict[str, DnsRecord] = {p.name: p for p in _all_policies}
+            except UnifiProviderError as exc:
+                log_service.log(
+                    f"UniFi pass: could not list policies — {exc}",
+                    level="ERROR",
+                )
+                logger.error("UniFi list_records failed, aborting pass: %s", exc)
+                return
             unifi_created = unifi_updated = unifi_unchanged = unifi_deleted = unifi_failed = 0
 
             for record_name in records:
@@ -136,7 +166,7 @@ async def _ddns_check_job(http_client: httpx.AsyncClient, unifi_http_client: htt
                 # --- Deletion pass: remove policy when user disables UniFi for this record ---
                 if cfg is None or not cfg.unifi_enabled:
                     try:
-                        existing = await unifi_client.get_record(config.unifi_site_id, record_name)
+                        existing = existing_policies.get(record_name)
                         if existing is not None:
                             await unifi_client.delete_record(config.unifi_site_id, existing.id)
                             log_service.log(
@@ -156,7 +186,7 @@ async def _ddns_check_job(http_client: httpx.AsyncClient, unifi_http_client: htt
                     local_record_name = _to_local_policy_name(record_name)
                     if local_record_name != record_name:
                         try:
-                            existing_local = await unifi_client.get_record(config.unifi_site_id, local_record_name)
+                            existing_local = existing_policies.get(local_record_name)
                             if existing_local is not None:
                                 await unifi_client.delete_record(config.unifi_site_id, existing_local.id)
                                 log_service.log(
@@ -187,7 +217,7 @@ async def _ddns_check_job(http_client: httpx.AsyncClient, unifi_http_client: htt
                     continue
 
                 try:
-                    existing = await unifi_client.get_record(config.unifi_site_id, record_name)
+                    existing = existing_policies.get(record_name)
                     if existing is None:
                         await unifi_client.create_record(config.unifi_site_id, record_name, target_ip)
                         log_service.log(
@@ -229,7 +259,7 @@ async def _ddns_check_job(http_client: httpx.AsyncClient, unifi_http_client: htt
 
                 if not cfg.unifi_local_enabled:
                     try:
-                        existing_local = await unifi_client.get_record(config.unifi_site_id, local_record_name)
+                        existing_local = existing_policies.get(local_record_name)
                         if existing_local is not None:
                             await unifi_client.delete_record(config.unifi_site_id, existing_local.id)
                             log_service.log(
@@ -260,7 +290,7 @@ async def _ddns_check_job(http_client: httpx.AsyncClient, unifi_http_client: htt
                     continue
 
                 try:
-                    existing_local = await unifi_client.get_record(config.unifi_site_id, local_record_name)
+                    existing_local = existing_policies.get(local_record_name)
                     if existing_local is None:
                         await unifi_client.create_record(config.unifi_site_id, local_record_name, local_target_ip)
                         log_service.log(
@@ -309,6 +339,82 @@ async def _ddns_check_job(http_client: httpx.AsyncClient, unifi_http_client: htt
         # Run daily log cleanup at the end of each cycle if due
         run_cleanup(session, days_to_keep=7)
 
+    # -------------------------------------------------------------------------
+    # SSE broadcasts — fire after the DB session is closed (data is committed)
+    # -------------------------------------------------------------------------
+    if broadcaster is not None:
+        import asyncio  # noqa: PLC0415 — local import keeps startup fast
+        from shared_templates import templates  # noqa: PLC0415
+
+        # Publish ip_updated with the last successfully fetched IP.
+        # NOTE: ip_service is out of scope here; re-fetch from ipify (cached on
+        # app.state when the scheduler was called with app_state, but the
+        # scheduler job doesn't carry app_state — so this is a lightweight call
+        # that will hit the cache if the job used the same client recently).
+        try:
+            _ip_svc = IpService(http_client=http_client)
+            _current_ip = await _ip_svc.get_public_ip()
+            # NOTE: Plain text — HTMX sse-swap uses it as innerHTML directly
+            broadcaster.publish("ip_updated", _current_ip)
+        except Exception as exc:
+            logger.debug("Broadcaster: could not publish ip_updated: %s", exc)
+
+        # Publish records_updated with a stats-based render (no extra CF calls).
+        # This gives connected clients a quick UI update; the SSE on-connect
+        # render provides the full live state for newly connected clients.
+        try:
+            with Session(engine) as _bcast_session:
+                _bcast_config_repo = ConfigRepository(_bcast_session)
+                _bcast_config = _bcast_config_repo.load()
+                _bcast_records = _bcast_config_repo.get_records(_bcast_config)
+                _bcast_stats = StatsRepository(_bcast_session).get_bulk(_bcast_records)
+                _bcast_cfgs = RecordConfigRepository(_bcast_session).get_all(_bcast_records)
+                _, _, _, _unifi_default_ip, _unifi_enabled = (
+                    _bcast_config.unifi_host,
+                    _bcast_config.unifi_api_key,
+                    _bcast_config.unifi_site_id,
+                    _bcast_config.unifi_default_ip,
+                    _bcast_config.unifi_enabled,
+                )
+            rows = [
+                {
+                    "name": r,
+                    "cf_record_id": None,
+                    "dns_ip": "\u2014",
+                    "is_up_to_date": None,
+                    "updates": (_bcast_stats.get(r).updates if _bcast_stats.get(r) else 0),
+                    "failures": (_bcast_stats.get(r).failures if _bcast_stats.get(r) else 0),
+                    "last_checked": (
+                        _bcast_stats.get(r).last_checked.isoformat()
+                        if _bcast_stats.get(r) and _bcast_stats.get(r).last_checked else None
+                    ),
+                    "last_updated": (
+                        _bcast_stats.get(r).last_updated.isoformat()
+                        if _bcast_stats.get(r) and _bcast_stats.get(r).last_updated else None
+                    ),
+                    "unifi_ip": None,
+                    "unifi_local_ip": None,
+                    "unifi_record_id": None,
+                    "cfg_cf_enabled": _bcast_cfgs.get(r).cf_enabled if _bcast_cfgs.get(r) else True,
+                    "cfg_ip_mode": _bcast_cfgs.get(r).ip_mode if _bcast_cfgs.get(r) else "dynamic",
+                    "cfg_static_ip": _bcast_cfgs.get(r).static_ip if _bcast_cfgs.get(r) else "",
+                    "cfg_unifi_enabled": _bcast_cfgs.get(r).unifi_enabled if _bcast_cfgs.get(r) else False,
+                    "cfg_unifi_static_ip": _bcast_cfgs.get(r).unifi_static_ip if _bcast_cfgs.get(r) else "",
+                    "cfg_unifi_local_enabled": _bcast_cfgs.get(r).unifi_local_enabled if _bcast_cfgs.get(r) else False,
+                    "cfg_unifi_local_static_ip": _bcast_cfgs.get(r).unifi_local_static_ip if _bcast_cfgs.get(r) else "",
+                }
+                for r in _bcast_records
+            ]
+            _html = templates.get_template("partials/records_table.html").render(
+                {"records": rows, "unifi_enabled": _unifi_enabled, "unifi_default_ip": _unifi_default_ip}
+            )
+            broadcaster.publish("records_updated", _html)
+        except Exception as exc:
+            logger.warning("Broadcaster: could not publish records_updated: %s", exc)
+
+        # Signal log panel to refresh
+        broadcaster.publish("log_appended", "{}")
+
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -319,6 +425,7 @@ def create_scheduler(
     http_client: httpx.AsyncClient,
     unifi_http_client: httpx.AsyncClient,
     interval_seconds: int = 300,
+    broadcaster: BroadcastService | None = None,
 ) -> AsyncIOScheduler:
     """
     Creates and returns a configured AsyncIOScheduler with the DDNS check job.
@@ -330,6 +437,7 @@ def create_scheduler(
         http_client: The shared httpx.AsyncClient to pass into the job.
         unifi_http_client: The UniFi-specific client (verify=False) to pass into the job.
         interval_seconds: Seconds between DDNS check cycles (default 300).
+        broadcaster: Optional BroadcastService for SSE push after each cycle.
 
     Returns:
         A configured but not yet started AsyncIOScheduler.
@@ -340,7 +448,11 @@ def create_scheduler(
         trigger="interval",
         seconds=interval_seconds,
         id=_JOB_ID,
-        kwargs={"http_client": http_client, "unifi_http_client": unifi_http_client},
+        kwargs={
+            "http_client": http_client,
+            "unifi_http_client": unifi_http_client,
+            "broadcaster": broadcaster,
+        },
         # NOTE: next_run_time=now triggers the first check immediately on startup
         # rather than waiting a full interval before the first run.
         next_run_time=datetime.now(timezone.utc),
@@ -375,6 +487,7 @@ def reschedule(scheduler: AsyncIOScheduler, http_client: httpx.AsyncClient, inte
 async def run_ddns_check_now(
     http_client: httpx.AsyncClient,
     unifi_http_client: httpx.AsyncClient,
+    broadcaster: BroadcastService | None = None,
 ) -> None:
     """
     Runs one DDNS check cycle immediately, outside the normal schedule.
@@ -385,9 +498,14 @@ async def run_ddns_check_now(
     Args:
         http_client: The shared httpx.AsyncClient from app.state.
         unifi_http_client: The UniFi-specific client from app.state.
+        broadcaster: Optional BroadcastService for SSE push after the cycle.
 
     Returns:
         None
     """
     logger.info("Manual sync triggered via UI.")
-    await _ddns_check_job(http_client=http_client, unifi_http_client=unifi_http_client)
+    await _ddns_check_job(
+        http_client=http_client,
+        unifi_http_client=unifi_http_client,
+        broadcaster=broadcaster,
+    )

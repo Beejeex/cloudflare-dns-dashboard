@@ -74,6 +74,28 @@ class StatsRepository:
         statement = select(RecordStats).order_by(RecordStats.record_name)
         return list(self._session.exec(statement).all())
 
+    def get_bulk(self, names: list[str]) -> dict[str, RecordStats]:
+        """
+        Returns a dict of RecordStats keyed by FQDN for all listed names.
+
+        Issues a single SELECT … WHERE record_name IN (…) query instead of
+        N individual lookups, reducing DB round-trips for dashboard renders.
+        Names that have no row in the DB are absent from the returned dict
+        (not a KeyError — callers should use .get()).
+
+        Args:
+            names: List of FQDNs to look up.
+
+        Returns:
+            dict[str, RecordStats] keyed by record_name.  Only names that
+            have an existing row appear as keys.
+        """
+        if not names:
+            return {}
+        statement = select(RecordStats).where(RecordStats.record_name.in_(names))
+        rows = self._session.exec(statement).all()
+        return {row.record_name: row for row in rows}
+
     def get_by_name(self, record_name: str) -> RecordStats | None:
         """
         Returns the RecordStats row for the given FQDN, or None if absent.

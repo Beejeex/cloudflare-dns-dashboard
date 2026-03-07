@@ -19,11 +19,24 @@
     </div>
   </div>
   <div class="card-body" style="padding: 0.75rem;">
-    <div id="log-content"
-         hx-get="/api/logs/recent"
-         hx-trigger="load, every {{ refresh }}s"
-         hx-swap="innerHTML">
-      {% include "partials/log_panel.html" %}
+    <div x-data="{ follow: true }"
+         x-init="$el.addEventListener('htmx:afterSwap', () => {
+           if (follow) {
+             const log = $el.querySelector('.log-viewer');
+             if (log) $nextTick(() => { log.scrollTop = log.scrollHeight; });
+           }
+         })">
+      <div style="display:flex; align-items:center; justify-content:flex-end; margin-bottom:0.4rem;">
+        <button class="btn btn-ghost btn-sm"
+                @click="follow = !follow"
+                x-text="follow ? 'Following \u25bc' : 'Paused \u23f8'">Following &#9660;</button>
+      </div>
+      <div id="log-content"
+           hx-get="/api/logs/recent"
+           hx-trigger="load, sse:log_appended"
+           hx-swap="innerHTML">
+        {% include "partials/log_panel.html" %}
+      </div>
     </div>
   </div>
 </div>

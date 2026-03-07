@@ -162,6 +162,53 @@ class DnsService:
             summary_parts.append(f"{failed_count} failed")
         self._log.log("Cloudflare pass: " + ", ".join(summary_parts) + ".", level="INFO")
 
+    async def fetch_zone_record_map(
+        self,
+        managed_records: list[str],
+        zones: dict[str, str],
+    ) -> dict[str, DnsRecord | None]:
+        """
+        Returns a map of {fqdn: DnsRecord | None} for all managed records.
+
+        Calls list_records() exactly once per unique zone rather than once per
+        record, reducing Cloudflare API calls from N (one per record) to Z
+        (one per zone).  Records not found in their zone map to None.
+
+        Args:
+            managed_records: List of FQDNs whose current state is needed.
+            zones: Mapping of base domain to provider zone ID.
+
+        Returns:
+            dict keyed by FQDN.  Value is the DnsRecord if the record exists
+            in the zone, or None if it was not found.
+        """
+        # --- Determine which zone IDs are needed ---
+        zone_to_records: dict[str, list[str]] = {}
+        result: dict[str, DnsRecord | None] = {r: None for r in managed_records}
+
+        for record_name in managed_records:
+            zone_id = self._resolve_zone_id(record_name, zones)
+            if zone_id is not None:
+                zone_to_records.setdefault(zone_id, []).append(record_name)
+
+        # --- One list_records() call per zone ---
+        for zone_id, names in zone_to_records.items():
+            try:
+                all_zone_records = await self._provider.list_records(zone_id)
+                # Build a name → DnsRecord lookup from the full zone listing
+                by_name = {r.name: r for r in all_zone_records}
+                for name in names:
+                    result[name] = by_name.get(name)
+            except DnsProviderError as exc:
+                logger.warning(
+                    "fetch_zone_record_map: could not list records for zone %s: %s",
+                    zone_id,
+                    exc,
+                )
+                # Leave affected records as None — caller handles missing entries
+
+        return result
+
     async def check_single_record(
         self,
         record_name: str,

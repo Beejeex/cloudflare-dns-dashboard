@@ -267,3 +267,90 @@ async def test_run_check_cycle_no_reset_when_no_prior_failures(db_session):
     stats = repo.get_by_name("home.example.com")
     # May be None if stats row was never created (no failures, just a check)
     assert stats is None or stats.failures == 0
+
+
+# ---------------------------------------------------------------------------
+# fetch_zone_record_map
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fetch_zone_record_map_calls_list_records_once_per_zone(db_session):
+    """fetch_zone_record_map must call list_records() exactly once per zone,
+    not once per managed record."""
+    provider = AsyncMock()
+    provider.list_records.return_value = [
+        _mock_record(content="1.2.3.4"),
+        DnsRecord(
+            id="rec2",
+            name="api.example.com",
+            content="1.2.3.4",
+            type="A",
+            ttl=1,
+            proxied=False,
+            zone_id="zone123",
+        ),
+    ]
+    ip_service = AsyncMock()
+    service = _make_dns_service(db_session, provider, ip_service)
+
+    result = await service.fetch_zone_record_map(
+        managed_records=["home.example.com", "api.example.com"],
+        zones={"example.com": "zone123"},
+    )
+
+    # Two records in the same zone — list_records called exactly once
+    provider.list_records.assert_called_once_with("zone123")
+    assert result["home.example.com"] is not None
+    assert result["api.example.com"] is not None
+
+
+@pytest.mark.asyncio
+async def test_fetch_zone_record_map_maps_missing_records_to_none(db_session):
+    """fetch_zone_record_map must return None for records not present in the
+    zone listing rather than raising a KeyError."""
+    provider = AsyncMock()
+    # Zone contains only 'home.example.com'
+    provider.list_records.return_value = [_mock_record(content="1.2.3.4")]
+    ip_service = AsyncMock()
+    service = _make_dns_service(db_session, provider, ip_service)
+
+    result = await service.fetch_zone_record_map(
+        managed_records=["home.example.com", "missing.example.com"],
+        zones={"example.com": "zone123"},
+    )
+
+    assert result["home.example.com"] is not None
+    assert result["missing.example.com"] is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_zone_record_map_multiple_zones_one_call_each(db_session):
+    """fetch_zone_record_map must issue one list_records() call per distinct
+    zone when records span multiple zones."""
+    provider = AsyncMock()
+    provider.list_records.side_effect = [
+        [_mock_record(content="1.2.3.4")],   # zone-a
+        [
+            DnsRecord(
+                id="rec3",
+                name="other.other.com",
+                content="5.6.7.8",
+                type="A",
+                ttl=1,
+                proxied=False,
+                zone_id="zone-b",
+            )
+        ],                                    # zone-b
+    ]
+    ip_service = AsyncMock()
+    service = _make_dns_service(db_session, provider, ip_service)
+
+    result = await service.fetch_zone_record_map(
+        managed_records=["home.example.com", "other.other.com"],
+        zones={"example.com": "zone-a", "other.com": "zone-b"},
+    )
+
+    assert provider.list_records.call_count == 2
+    assert result["home.example.com"] is not None
+    assert result["other.other.com"] is not None
