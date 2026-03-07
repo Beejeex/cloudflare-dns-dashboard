@@ -372,9 +372,20 @@ class DnsService:
             await self._stats.record_checked(record_name)
 
             if dns_record is None:
-                self._log.log(f"Cloudflare: record not found — {record_name}", level="WARNING")
-                await self._stats.record_failed(record_name)
-                return "failed"
+                # Record doesn't exist in Cloudflare yet — create it automatically.
+                self._log.log(
+                    f"Cloudflare: record not found — creating {record_name} → {target_ip}…",
+                    level="INFO",
+                )
+                await self._provider.create_record(zone_id, record_name, target_ip)
+                self._log.log(
+                    f"Cloudflare: created {record_name} → {target_ip} ✓",
+                    level="INFO",
+                )
+                await self._stats.record_updated(record_name)
+                if prior_failures > 0:
+                    await self._stats.reset_failures(record_name)
+                return "updated"
 
             if dns_record.content == target_ip:
                 logger.debug("%s is already up to date (%s).", record_name, target_ip)

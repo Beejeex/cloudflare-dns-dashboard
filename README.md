@@ -211,7 +211,7 @@ Images are published to GitHub Container Registry:
 
 ```
 ghcr.io/beejeex/cloudflare-dns-dashboard:latest      # most recent release
-ghcr.io/beejeex/cloudflare-dns-dashboard:v2.1.1      # pinned release
+ghcr.io/beejeex/cloudflare-dns-dashboard:v2.1.2      # pinned release
 ```
 
 ---

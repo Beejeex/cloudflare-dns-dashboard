@@ -354,3 +354,60 @@ async def test_fetch_zone_record_map_multiple_zones_one_call_each(db_session):
     assert provider.list_records.call_count == 2
     assert result["home.example.com"] is not None
     assert result["other.other.com"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Auto-create — record missing in Cloudflare gets created automatically
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_check_cycle_creates_record_when_not_found(db_session):
+    """When get_record returns None, create_record must be called with the target IP."""
+    ip_service = AsyncMock()
+    ip_service.get_public_ip.return_value = "9.9.9.9"
+
+    provider = AsyncMock()
+    # Simulate record not yet existing in Cloudflare
+    provider.get_record.return_value = None
+    provider.create_record.return_value = DnsRecord(
+        id="new1",
+        name="home.example.com",
+        content="9.9.9.9",
+        type="A",
+        ttl=1,
+        proxied=False,
+        zone_id="zone123",
+    )
+
+    service = _make_dns_service(db_session, provider, ip_service)
+    await service.run_check_cycle(
+        managed_records=["home.example.com"],
+        zones={"example.com": "zone123"},
+    )
+
+    provider.create_record.assert_called_once_with("zone123", "home.example.com", "9.9.9.9")
+    provider.update_record.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_check_cycle_create_failure_records_stat(db_session):
+    """When create_record raises DnsProviderError, the failure counter is incremented."""
+    ip_service = AsyncMock()
+    ip_service.get_public_ip.return_value = "9.9.9.9"
+
+    provider = AsyncMock()
+    provider.get_record.return_value = None
+    provider.create_record.side_effect = DnsProviderError("create failed")
+
+    service = _make_dns_service(db_session, provider, ip_service)
+    await service.run_check_cycle(
+        managed_records=["home.example.com"],
+        zones={"example.com": "zone123"},
+    )
+
+    from repositories.stats_repository import StatsRepository
+    repo = StatsRepository(db_session)
+    stats = repo.get_by_name("home.example.com")
+    assert stats is not None
+    assert stats.failures == 1
