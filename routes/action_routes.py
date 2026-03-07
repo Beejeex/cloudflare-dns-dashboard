@@ -624,17 +624,16 @@ async def create_record(
     record_ip: str = Form(...),
     config_service: ConfigService = Depends(get_config_service),
     dns_service: DnsService = Depends(get_dns_service),
-    stats_service: StatsService = Depends(get_stats_service),
     log_service: LogService = Depends(get_log_service),
-    record_config_repo: RecordConfigRepository = Depends(get_record_config_repo),
 ) -> HTMLResponse:
     """
     Creates a new Cloudflare A-record and adds it to the managed list.
 
-    On success, returns the records-table partial and the caller triggers
-    a full page reload via hx-on:htmx:after-request.
+    On success, returns an empty 200 response. The htmx:afterRequest handler
+    on the page calls safeReload() for /create-record, so no table fragment
+    is needed here (returning one would flash it inside #create-record-status).
     On failure, returns a minimal error fragment with class ``alert-error``
-    so the caller can display it without clobbering the managed records table.
+    so the caller can display it without triggering a reload.
 
     Args:
         request: The incoming FastAPI request.
@@ -642,12 +641,10 @@ async def create_record(
         record_ip: The IPv4 address for the new record.
         config_service: Provides zones and managed records.
         dns_service: Creates the record in the DNS provider.
-        stats_service: Provides stats for the rendered table after creation.
         log_service: Writes a UI log entry on success or failure.
 
     Returns:
-        An HTMLResponse with the records-table partial on success, or a
-        plain error div fragment on failure.
+        Empty HTMLResponse on success, or a plain error div fragment on failure.
     """
     zones = await config_service.get_zones()
     error_message = None
@@ -672,19 +669,8 @@ async def create_record(
             ),
             status_code=200,
         )
-    records = await config_service.get_managed_records()
-    all_stats = await stats_service.get_all()
-    stats_by_name = {s.record_name: s for s in all_stats}
-    cfgs = record_config_repo.get_all(records)
-    _, _, _, unifi_default_ip, unifi_enabled = await config_service.get_unifi_config()
 
-    return templates.TemplateResponse(
-        request,
-        "partials/records_table.html",
-        {
-            "records": _build_record_rows(records, stats_by_name, cfgs),
-            "unifi_enabled": unifi_enabled,
-            "unifi_default_ip": unifi_default_ip,
-            "error_message": error_message,
-        },
-    )
+    # NOTE: Return empty — the htmx:afterRequest handler calls safeReload() for
+    # /create-record, so injecting any table here would flash inside #create-record-status
+    # before the reload. Empty body is sufficient to trigger the reload path.
+    return HTMLResponse("")

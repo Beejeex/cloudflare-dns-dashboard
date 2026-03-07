@@ -135,3 +135,102 @@ async def test_list_records_returns_all_records(mock_http):
 
     assert len(result) == 2
     assert all(isinstance(r, DnsRecord) for r in result)
+
+
+# ---------------------------------------------------------------------------
+# create_record
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_record_posts_correct_payload(mock_http):
+    """create_record must POST an A-record payload and return the created DnsRecord."""
+    import json as _json
+
+    new_record = _record_dict(id="new-rec-1", name="new.example.com", content="5.6.7.8")
+    route = mock_http.post(f"{_BASE}/zones/{_ZONE}/dns_records").mock(
+        return_value=httpx.Response(200, json=_cf_response(new_record))
+    )
+    async with httpx.AsyncClient() as client:
+        cf = CloudflareClient(client, _TOKEN)
+        result = await cf.create_record(_ZONE, "new.example.com", "5.6.7.8")
+
+    assert isinstance(result, DnsRecord)
+    assert result.id == "new-rec-1"
+    assert result.name == "new.example.com"
+    assert result.content == "5.6.7.8"
+
+    body = _json.loads(route.calls[0].request.content)
+    assert body["type"] == "A"
+    assert body["name"] == "new.example.com"
+    assert body["content"] == "5.6.7.8"
+    assert body["ttl"] == 1
+    assert body["proxied"] is False
+
+
+@pytest.mark.asyncio
+async def test_create_record_raises_on_http_error(mock_http):
+    """create_record raises DnsProviderError when the API returns a 4xx/5xx status."""
+    mock_http.post(f"{_BASE}/zones/{_ZONE}/dns_records").mock(
+        return_value=httpx.Response(422, json={"errors": ["invalid record"]})
+    )
+    async with httpx.AsyncClient() as client:
+        cf = CloudflareClient(client, _TOKEN)
+        with pytest.raises(DnsProviderError):
+            await cf.create_record(_ZONE, "new.example.com", "5.6.7.8")
+
+
+@pytest.mark.asyncio
+async def test_create_record_raises_on_success_false(mock_http):
+    """create_record raises DnsProviderError when success=false in the response body."""
+    mock_http.post(f"{_BASE}/zones/{_ZONE}/dns_records").mock(
+        return_value=httpx.Response(
+            200,
+            json={"success": False, "errors": [{"message": "record already exists"}], "result": {}},
+        )
+    )
+    async with httpx.AsyncClient() as client:
+        cf = CloudflareClient(client, _TOKEN)
+        with pytest.raises(DnsProviderError, match="success=false"):
+            await cf.create_record(_ZONE, "dup.example.com", "1.2.3.4")
+
+
+# ---------------------------------------------------------------------------
+# delete_record
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_delete_record_sends_delete_request(mock_http):
+    """delete_record must call DELETE on the record endpoint without raising."""
+    mock_http.delete(f"{_BASE}/zones/{_ZONE}/dns_records/rec1").mock(
+        return_value=httpx.Response(200, json=_cf_response({"id": "rec1"}))
+    )
+    async with httpx.AsyncClient() as client:
+        cf = CloudflareClient(client, _TOKEN)
+        # Must not raise
+        await cf.delete_record(_ZONE, "rec1")
+
+
+@pytest.mark.asyncio
+async def test_delete_record_raises_on_http_error(mock_http):
+    """delete_record raises DnsProviderError when the API returns 404."""
+    mock_http.delete(f"{_BASE}/zones/{_ZONE}/dns_records/missing-id").mock(
+        return_value=httpx.Response(404, json={"errors": [{"message": "record not found"}]})
+    )
+    async with httpx.AsyncClient() as client:
+        cf = CloudflareClient(client, _TOKEN)
+        with pytest.raises(DnsProviderError):
+            await cf.delete_record(_ZONE, "missing-id")
+
+
+@pytest.mark.asyncio
+async def test_delete_record_raises_on_network_error(mock_http):
+    """delete_record raises DnsProviderError on a network-level failure."""
+    mock_http.delete(f"{_BASE}/zones/{_ZONE}/dns_records/rec1").mock(
+        side_effect=httpx.ConnectError("connection reset")
+    )
+    async with httpx.AsyncClient() as client:
+        cf = CloudflareClient(client, _TOKEN)
+        with pytest.raises(DnsProviderError, match="connection reset"):
+            await cf.delete_record(_ZONE, "rec1")

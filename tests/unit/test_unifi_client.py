@@ -215,6 +215,38 @@ async def test_update_record_puts_new_ip(mock_http):
     assert record.content == "192.168.1.99"
 
 
+@pytest.mark.asyncio
+async def test_update_record_raises_on_http_error(mock_http):
+    """update_record raises UnifiProviderError when the controller returns a 500."""
+    existing = DnsRecord(
+        id=_POLICY_ID, name="home.example.com", content="192.168.1.10",
+        type="A", ttl=14400, proxied=False, zone_id="",
+    )
+    mock_http.put(f"{_BASE}/sites/{_SITE_ID}/dns/policies/{_POLICY_ID}").mock(
+        return_value=httpx.Response(500, text="Internal Server Error")
+    )
+    async with httpx.AsyncClient() as http_client:
+        client = UnifiClient(http_client=http_client, api_key="key", host=_HOST)
+        with pytest.raises(UnifiProviderError, match="500"):
+            await client.update_record(_SITE_ID, existing, "192.168.1.99")
+
+
+@pytest.mark.asyncio
+async def test_update_record_raises_on_network_error(mock_http):
+    """update_record raises UnifiProviderError on a network-level ConnectError."""
+    existing = DnsRecord(
+        id=_POLICY_ID, name="home.example.com", content="192.168.1.10",
+        type="A", ttl=14400, proxied=False, zone_id="",
+    )
+    mock_http.put(f"{_BASE}/sites/{_SITE_ID}/dns/policies/{_POLICY_ID}").mock(
+        side_effect=httpx.ConnectError("connection refused")
+    )
+    async with httpx.AsyncClient() as http_client:
+        client = UnifiClient(http_client=http_client, api_key="key", host=_HOST)
+        with pytest.raises(UnifiProviderError, match="connection refused"):
+            await client.update_record(_SITE_ID, existing, "192.168.1.99")
+
+
 # ---------------------------------------------------------------------------
 # delete_record
 # ---------------------------------------------------------------------------
@@ -230,6 +262,30 @@ async def test_delete_record_sends_delete_request(mock_http):
         client = UnifiClient(http_client=http_client, api_key="key", host=_HOST)
         await client.delete_record(_SITE_ID, _POLICY_ID)
     # No exception = success
+
+
+@pytest.mark.asyncio
+async def test_delete_record_raises_on_http_error(mock_http):
+    """delete_record raises UnifiProviderError when the controller returns a 500."""
+    mock_http.delete(f"{_BASE}/sites/{_SITE_ID}/dns/policies/{_POLICY_ID}").mock(
+        return_value=httpx.Response(500, text="Internal Server Error")
+    )
+    async with httpx.AsyncClient() as http_client:
+        client = UnifiClient(http_client=http_client, api_key="key", host=_HOST)
+        with pytest.raises(UnifiProviderError, match="500"):
+            await client.delete_record(_SITE_ID, _POLICY_ID)
+
+
+@pytest.mark.asyncio
+async def test_delete_record_raises_on_not_found(mock_http):
+    """delete_record raises UnifiProviderError when the policy does not exist (404)."""
+    mock_http.delete(f"{_BASE}/sites/{_SITE_ID}/dns/policies/nonexistent-id").mock(
+        return_value=httpx.Response(404, text="Not Found")
+    )
+    async with httpx.AsyncClient() as http_client:
+        client = UnifiClient(http_client=http_client, api_key="key", host=_HOST)
+        with pytest.raises(UnifiProviderError, match="404"):
+            await client.delete_record(_SITE_ID, "nonexistent-id")
 
 
 # ---------------------------------------------------------------------------
