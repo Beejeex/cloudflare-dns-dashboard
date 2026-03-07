@@ -206,7 +206,7 @@ Images are published to GitHub Container Registry:
 
 ```
 ghcr.io/beejeex/cloudflare-dns-dashboard:latest      # most recent release
-ghcr.io/beejeex/cloudflare-dns-dashboard:v2.0.28     # pinned release
+ghcr.io/beejeex/cloudflare-dns-dashboard:v2.1.0      # pinned release
 ```
 
 ---
@@ -231,7 +231,8 @@ ghcr.io/beejeex/cloudflare-dns-dashboard:v2.0.28     # pinned release
 | `v2.0.25` | Sync Now button; zone-based FQDN reconstruction for orphaned .local policies |
 | `v2.0.26` | Color-coded rip-labels per service; K8s Ingress shown in managed record rows |
 | `v2.0.27` | Discovery search + filter bar; multi-service badges; fix create-record error handling |
-| `v2.0.28` | **Current** — Status badge colors now match per-service source badge colors (CF=sky, UniFi=violet) |
+| `v2.0.28` | Status badge colors now match per-service source badge colors (CF=sky, UniFi=violet) |
+| `v2.1.0` | **Current** — Unified discovery grid, toggle switches for managed/unmanaged, custom confirm modal, SSE-driven log updates, UniFi single-fetch sync, visual refresh (uniform stat card colors, inline SVG favicon) |
 
 This is **beta software**. The database schema may change between minor versions. Pin to a specific image tag in production.
 
