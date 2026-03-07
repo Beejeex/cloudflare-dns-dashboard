@@ -103,20 +103,10 @@ async def sse_events(
             # NOTE: Plain text so HTMX sse-swap can set it directly as innerHTML
             yield {"event": "ip_updated", "data": current_ip}
 
-            # --- On-connect: push live records fragment ---
-            try:
-                records_html = await _render_records_for_sse(
-                    request=request,
-                    config_service=config_service,
-                    dns_service=dns_service,
-                    stats_repo=stats_repo,
-                    record_config_repo=record_config_repo,
-                    unifi_client=unifi_client,
-                    current_ip=current_ip,
-                )
-                yield {"event": "records_updated", "data": records_html}
-            except Exception as exc:
-                logger.warning("SSE on-connect: records render failed: %s", exc)
+            # NOTE: records_updated is NOT sent on-connect because the dashboard
+            # page is already rendered fresh by the template.  Sending it here
+            # would immediately trigger a location.reload() loop in the unified
+            # grid view.  The scheduler pushes records_updated after each sync cycle.
 
             # --- Stream: forward queue events until disconnect ---
             while True:
@@ -516,16 +506,8 @@ async def get_records(
         }
     )
 
-    # Append OOB elements so HTMX updates stat cards without a full page reload.
-    total_updates = sum(r["updates"] for r in record_data)
-    total_failures = sum(r["failures"] for r in record_data)
-    failures_style = "color:#dc2626;" if total_failures > 0 else ""
-    oob = (
-        f'<span id="stat-managed" hx-swap-oob="true">{len(record_data)}</span>'
-        f'<span id="stat-updates" hx-swap-oob="true">{total_updates}</span>'
-        f'<span id="stat-failures" hx-swap-oob="true" style="{failures_style}">'
-        f"{total_failures}</span>"
-    )
+    # Append OOB element so HTMX updates the managed-count stat card without a full page reload.
+    oob = f'<span id="stat-managed" hx-swap-oob="true">{len(record_data)}</span>'
 
     return HTMLResponse(content=records_html + oob)
 

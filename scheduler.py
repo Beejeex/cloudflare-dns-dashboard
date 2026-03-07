@@ -19,6 +19,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlmodel import Session
 
 from cloudflare.cloudflare_client import CloudflareClient
+from cloudflare.dns_provider import DnsRecord
 from cloudflare.unifi_client import UnifiClient
 from db.database import engine
 from exceptions import UnifiProviderError
@@ -144,6 +145,19 @@ async def _ddns_check_job(
                 f"UniFi pass: syncing {len(unifi_enabled_records)} of {len(records)} record(s) to {config.unifi_host}.",
                 level="INFO",
             )
+            # NOTE: Fetch ALL existing policies in ONE call here, then do dict
+            # lookups per record. Without this, each get_record() triggers a
+            # separate GET /dns/policies, causing a burst that returns 502s.
+            try:
+                _all_policies = await unifi_client.list_records(config.unifi_site_id)
+                existing_policies: dict[str, DnsRecord] = {p.name: p for p in _all_policies}
+            except UnifiProviderError as exc:
+                log_service.log(
+                    f"UniFi pass: could not list policies — {exc}",
+                    level="ERROR",
+                )
+                logger.error("UniFi list_records failed, aborting pass: %s", exc)
+                return
             unifi_created = unifi_updated = unifi_unchanged = unifi_deleted = unifi_failed = 0
 
             for record_name in records:
@@ -152,7 +166,7 @@ async def _ddns_check_job(
                 # --- Deletion pass: remove policy when user disables UniFi for this record ---
                 if cfg is None or not cfg.unifi_enabled:
                     try:
-                        existing = await unifi_client.get_record(config.unifi_site_id, record_name)
+                        existing = existing_policies.get(record_name)
                         if existing is not None:
                             await unifi_client.delete_record(config.unifi_site_id, existing.id)
                             log_service.log(
@@ -172,7 +186,7 @@ async def _ddns_check_job(
                     local_record_name = _to_local_policy_name(record_name)
                     if local_record_name != record_name:
                         try:
-                            existing_local = await unifi_client.get_record(config.unifi_site_id, local_record_name)
+                            existing_local = existing_policies.get(local_record_name)
                             if existing_local is not None:
                                 await unifi_client.delete_record(config.unifi_site_id, existing_local.id)
                                 log_service.log(
@@ -203,7 +217,7 @@ async def _ddns_check_job(
                     continue
 
                 try:
-                    existing = await unifi_client.get_record(config.unifi_site_id, record_name)
+                    existing = existing_policies.get(record_name)
                     if existing is None:
                         await unifi_client.create_record(config.unifi_site_id, record_name, target_ip)
                         log_service.log(
@@ -245,7 +259,7 @@ async def _ddns_check_job(
 
                 if not cfg.unifi_local_enabled:
                     try:
-                        existing_local = await unifi_client.get_record(config.unifi_site_id, local_record_name)
+                        existing_local = existing_policies.get(local_record_name)
                         if existing_local is not None:
                             await unifi_client.delete_record(config.unifi_site_id, existing_local.id)
                             log_service.log(
@@ -276,7 +290,7 @@ async def _ddns_check_job(
                     continue
 
                 try:
-                    existing_local = await unifi_client.get_record(config.unifi_site_id, local_record_name)
+                    existing_local = existing_policies.get(local_record_name)
                     if existing_local is None:
                         await unifi_client.create_record(config.unifi_site_id, local_record_name, local_target_ip)
                         log_service.log(

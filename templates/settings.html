@@ -15,7 +15,7 @@
     <form id="settings-form"
           x-data="{ zones: [], showToken: false }"
           x-init="
-            zones = Object.entries({{ zones | safe }}).map(([d, z]) => ({ domain: d, zone_id: z }));
+            zones = Object.entries({{ zones }}).map(([d, z]) => ({ domain: d, zone_id: z }));
             $el.addEventListener('htmx:configRequest', e => {
               const obj = {};
               zones.forEach(z => { if (z.domain && z.zone_id) obj[z.domain] = z.zone_id; });
@@ -45,7 +45,7 @@
       <div class="form-group">
         <label>Zones</label>
         {# Hidden field serialised by the htmx:configRequest handler in x-init #}
-        <input type="hidden" id="zones" name="zones" value="{{ zones }}" required>
+        <input type="hidden" id="zones" name="zones" value="{{ zones | e }}" required>
 
         <div class="zone-header" x-show="zones.length > 0" x-cloak>
           <span>Domain</span><span>Zone ID</span><span></span>

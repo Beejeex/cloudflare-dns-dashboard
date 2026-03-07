@@ -5,21 +5,14 @@
 {% block content %}
 
 {# -------------------------------------------------------------------------
-   Stat cards row
+   Stat cards row — managed count, interval, next-check countdown
 ------------------------------------------------------------------------- #}
 <div class="card-grid mt-2">
   <div class="stat-card stat-card-managed">
     <div class="stat-value"><span id="stat-managed">{{ records | length }}</span></div>
     <div class="stat-label">Managed Records</div>
   </div>
-  <div class="stat-card stat-card-updates">
-    <div class="stat-value"><span id="stat-updates">{{ records | sum(attribute='updates') }}</span></div>
-    <div class="stat-label">Total Updates</div>
-  </div>
-  <div class="stat-card stat-card-failures">
-    <div class="stat-value"><span id="stat-failures" {% if records | sum(attribute='failures') > 0 %}style="color:var(--red-600)"{% endif %}>{{ records | sum(attribute='failures') }}</span></div>
-    <div class="stat-label">Total Failures</div>
-  </div>
+
   <div class="stat-card stat-card-interval">
     <div class="stat-value" style="font-size:1.5rem;">{{ interval }}s</div>
     <div class="stat-label">Check Interval</div>
@@ -57,207 +50,7 @@
 {% endif %}
 
 {# -------------------------------------------------------------------------
-   Two-column layout: Managed (60fr left) | Discovery (40fr right)
-------------------------------------------------------------------------- #}
-<div style="display:grid; grid-template-columns:60fr 40fr; gap:1rem; align-items:start; margin-bottom:1rem;">
-
-  {# ---- LEFT: Managed records (SSE-live, no polling) ---- #}
-  <div class="card">
-    <div class="card-header">
-      <span class="card-title">Managed DNS Records</span>
-      <div style="display:flex; align-items:center; gap:0.75rem;">
-        {% if unifi_enabled %}
-        <span style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.75rem; color:#64748b;">
-          <span style="width:8px; height:8px; border-radius:50%; background:#0284c7; display:inline-block;"></span>
-          UniFi active
-        </span>
-        {% endif %}
-        {% if k8s_enabled %}
-        <span style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.75rem; color:#64748b;">
-          <span style="width:8px; height:8px; border-radius:50%; background:#16a34a; display:inline-block;"></span>
-          K8s active
-        </span>
-        {% endif %}
-        <span class="htmx-indicator text-xs text-muted">updating…</span>
-        <button id="sync-now-btn"
-                hx-post="/api/trigger-sync"
-                hx-target="#sync-now-status"
-                hx-swap="innerHTML"
-                hx-indicator="#sync-now-btn"
-                hx-on:htmx:before-request="this.disabled=true; this.textContent='Syncing…'"
-                hx-on:htmx:after-request="this.disabled=false; this.textContent='Sync Now'"
-                class="btn btn-ghost btn-sm" style="font-size:0.8rem;">
-          Sync Now
-        </button>
-        <span id="sync-now-status" style="font-size:0.8rem; color:#64748b;"></span>
-      </div>
-    </div>
-
-    {# SSE swap target — replaces innerHTML when records_updated event fires #}
-    <div id="records-container"
-         sse-swap="records_updated"
-         hx-swap="innerHTML">
-      {% include "partials/records_table.html" %}
-    </div>
-  </div>
-
-  {# ---- RIGHT: Available Records (Alpine.js client-side filter) ---- #}
-  <div class="card"
-       x-data="{
-         search: '',
-         filter: 'all',
-         matches(el) {
-           const name    = (el.dataset.name    || '').toLowerCase();
-           const sources = (el.dataset.sources || '').toLowerCase();
-           const managed = (el.dataset.managed || '').toLowerCase();
-           const ms = !this.search || name.includes(this.search.toLowerCase());
-           const mf = this.filter === 'all'
-             || (this.filter === 'managed'   && managed === 'managed')
-             || (this.filter === 'unmanaged' && managed === 'unmanaged')
-             || sources.includes(this.filter);
-           return ms && mf;
-         }
-       }">
-    <div class="card-header" style="flex-wrap:wrap; gap:0.5rem;">
-      <span class="card-title">Available Records</span>
-      <span style="font-size:0.75rem; color:#64748b;">
-        {{ discovery_records | length }} record{{ 's' if discovery_records | length != 1 else '' }}
-      </span>
-      {# Search + source filter — Alpine.js reactive, zero network calls #}
-      <div style="display:flex; align-items:center; gap:0.5rem; margin-left:auto; flex-wrap:wrap;">
-        <input x-model="search" type="search" placeholder="Search records…"
-               style="font-size:0.8125rem; padding:0.3rem 0.65rem; border:1px solid #cbd5e1;
-                      border-radius:0.375rem; width:190px; outline:none;">
-        <div style="display:flex; gap:0.25rem; flex-wrap:wrap;">
-          <button class="disc-filter-btn" :class="{ active: filter === 'all' }"       @click="filter='all'">All</button>
-          <button class="disc-filter-btn" :class="{ active: filter === 'cf' }"        @click="filter='cf'">CF</button>
-          <button class="disc-filter-btn" :class="{ active: filter === 'unifi' }"     @click="filter='unifi'">UniFi</button>
-          <button class="disc-filter-btn" :class="{ active: filter === 'k8s' }"       @click="filter='k8s'">K8s</button>
-          <button class="disc-filter-btn" :class="{ active: filter === 'managed' }"   @click="filter='managed'">Managed</button>
-          <button class="disc-filter-btn" :class="{ active: filter === 'unmanaged' }" @click="filter='unmanaged'">Unmanaged</button>
-        </div>
-      </div>
-    </div>
-
-    {# Per-source error banners #}
-    {% if zone_records_error %}
-    <div style="padding:0.5rem 1.25rem; background:#fef3c7; border-bottom:1px solid #fde68a; color:#92400e; font-size:0.8rem;">
-      &#9888; Cloudflare: {{ zone_records_error }}
-    </div>
-    {% endif %}
-    {% if k8s_error %}
-    <div style="padding:0.5rem 1.25rem; background:#fef3c7; border-bottom:1px solid #fde68a; color:#92400e; font-size:0.8rem;">
-      &#9888; Kubernetes: {{ k8s_error }}
-    </div>
-    {% endif %}
-
-    {% if discovery_records %}
-    <div class="discovery-grid">
-      {% for r in discovery_records %}
-      {%- set srcs = [] %}
-      {%- if r.cf_ip is not none    %}{%- set srcs = srcs + ['cf']    %}{%- endif %}
-      {%- if r.unifi_ip is not none or r.unifi_local_ip is not none %}{%- set srcs = srcs + ['unifi'] %}{%- endif %}
-      {%- if r.k8s_namespace is not none %}{%- set srcs = srcs + ['k8s']   %}{%- endif %}
-      {# x-show="matches($el)" lets Alpine reactively show/hide based on search + filter #}
-      <div class="discovery-card{% if r.name in managed_names %} discovery-card-managed{% endif %}"
-           data-name="{{ r.name | lower }}"
-           data-sources="{{ srcs | join(' ') }}"
-           data-managed="{{ 'managed' if r.name in managed_names else 'unmanaged' }}"
-           x-show="matches($el)">
-        {# Source badges row #}
-        <div class="discovery-card-top">
-          {% if r.cf_ip is not none %}
-            <span class="badge badge-cf" style="font-size:0.7rem;">CF</span>
-          {% endif %}
-          {% if r.unifi_ip is not none %}
-            <span class="badge badge-unifi" style="font-size:0.7rem;">UniFi</span>
-          {% endif %}
-          {% if r.k8s_namespace is not none %}
-            <span class="badge badge-k8s" style="font-size:0.7rem;">K8s</span>
-          {% endif %}
-        </div>
-        <div class="discovery-card-name font-mono">{{ r.name }}</div>
-        {# Per-source IP / metadata rows #}
-        <div class="discovery-card-meta" style="display:flex; flex-direction:column; gap:0.15rem;">
-          {% if r.cf_ip is not none %}
-            <span><span class="badge badge-cf" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">CF</span>
-            <span class="font-mono"> {{ r.cf_ip }}</span></span>
-          {% endif %}
-          {% if r.unifi_ip is not none %}
-            <span><span class="badge badge-unifi" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">UniFi</span>
-            <span class="font-mono"> {{ r.unifi_ip }}</span></span>
-          {% endif %}
-          {% if r.unifi_local_ip is not none %}
-            <span><span class="badge badge-unifi" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">UniFi.local</span>
-            <span class="font-mono"> {{ r.unifi_local_ip }}</span></span>
-          {% endif %}
-          {% if r.k8s_namespace is not none %}
-            <span><span class="badge badge-k8s" style="font-size:0.65rem; padding:0.1rem 0.35rem; vertical-align:middle;">K8s</span>
-             {{ r.k8s_namespace }}/{{ r.k8s_ingress_name }}</span>
-          {% endif %}
-        </div>
-        <div class="discovery-card-actions">
-          {% if r.name not in managed_names %}
-            <form hx-post="/add-to-managed"
-                  hx-target="#records-container"
-                  hx-swap="innerHTML"
-                  style="display:inline">
-              <input type="hidden" name="record_name" value="{{ r.name }}">
-              {% if r.local_only %}
-              <input type="hidden" name="init_unifi_local" value="true">
-              {% endif %}
-              <button type="submit" class="btn btn-primary btn-sm">+ Manage</button>
-            </form>
-            {% if r.cf_record_id %}
-            <form hx-post="/delete-record"
-                  hx-target="#records-container"
-                  hx-swap="innerHTML"
-                  hx-confirm="Delete {{ r.name }} from Cloudflare? This cannot be undone."
-                  style="display:inline">
-              <input type="hidden" name="record_id" value="{{ r.cf_record_id }}">
-              <input type="hidden" name="record_name" value="{{ r.name }}">
-              <button type="submit" class="btn btn-danger btn-sm">Delete CF</button>
-            </form>
-            {% endif %}
-            {% if r.unifi_record_id %}
-            <form hx-post="/delete-unifi-record"
-                  hx-target="#unifi-del-status-{{ r.name | replace('.', '-') }}"
-                  hx-swap="innerHTML"
-                  hx-confirm="Delete UniFi policy for {{ r.name }}? This cannot be undone."
-                  style="display:inline">
-              <input type="hidden" name="record_id" value="{{ r.unifi_record_id }}">
-              <input type="hidden" name="record_name" value="{{ r.name }}">
-              <button type="submit" class="btn btn-danger btn-sm">Delete UniFi</button>
-            </form>
-            {% endif %}
-            {% if r.unifi_local_record_id %}
-            <form hx-post="/delete-unifi-record"
-                  hx-target="#unifi-del-status-{{ r.name | replace('.', '-') }}"
-                  hx-swap="innerHTML"
-                  hx-confirm="Delete UniFi .local policy for {{ r.name }}? This cannot be undone."
-                  style="display:inline">
-              <input type="hidden" name="record_id" value="{{ r.unifi_local_record_id }}">
-              <input type="hidden" name="record_name" value="{{ r.name }}.local">
-              <button type="submit" class="btn btn-danger btn-sm">Delete UniFi.local</button>
-            </form>
-            {% endif %}
-            <div id="unifi-del-status-{{ r.name | replace('.', '-') }}"></div>
-          {% else %}
-            <span class="badge badge-ok" style="font-size:0.75rem;">&#10003; Managed</span>
-          {% endif %}
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}
-    <div class="card-body"><span class="text-muted text-sm">No records discovered yet.</span></div>
-    {% endif %}
-  </div>
-
-</div>{# end two-column grid #}
-
-{# -------------------------------------------------------------------------
-   Create new A-record — below the main grid
+   Create new A-record
 ------------------------------------------------------------------------- #}
 <div class="card mb-2">
   <div class="card-header">
@@ -287,66 +80,569 @@
   </div>
 </div>
 
+{# -------------------------------------------------------------------------
+   Unified DNS Records — single grid, managed + unmanaged cards together.
+   Alpine x-data on the outer card provides search, source-filter and
+   managed-filter state. Each card exposes data-name / data-sources /
+   data-managed attributes so the matches() predicate can filter it.
+------------------------------------------------------------------------- #}
+<div class="card"
+     x-data="{
+       search: '',
+       srcFilter: 'all',
+       mgtFilter: 'all',
+       matches(el) {
+         const name  = (el.dataset.name    || '').toLowerCase();
+         const srcs  = (el.dataset.sources || '').toLowerCase();
+         const mgd   = el.dataset.managed;
+         const ms = !this.search || name.includes(this.search.toLowerCase());
+         const mf = this.srcFilter === 'all' || srcs.includes(this.srcFilter);
+         const mm = this.mgtFilter === 'all'
+                    || (this.mgtFilter === 'managed'   && mgd === 'true')
+                    || (this.mgtFilter === 'unmanaged' && mgd === 'false');
+         return ms && mf && mm;
+       }
+     }">
+
+  <div class="card-header" style="flex-wrap:wrap; gap:0.5rem;">
+    <span class="card-title">DNS Records</span>
+    <span style="font-size:0.75rem; color:#64748b;">
+      {{ records | length }} managed &middot; {{ discovery_records | length }} total
+    </span>
+
+    <div style="display:flex; align-items:center; gap:0.5rem; margin-left:auto; flex-wrap:wrap;">
+      {# Full-text search #}
+      <input x-model="search" type="search" placeholder="Search records…"
+             style="font-size:0.8125rem; padding:0.3rem 0.65rem; border:1px solid #cbd5e1;
+                    border-radius:0.375rem; width:180px; outline:none;">
+
+      {# Managed / Unmanaged filter #}
+      <div style="display:flex; gap:0.25rem;">
+        <button class="disc-filter-btn" :class="{ active: mgtFilter === 'all' }"       @click="mgtFilter='all'">All</button>
+        <button class="disc-filter-btn" :class="{ active: mgtFilter === 'managed' }"   @click="mgtFilter='managed'">Managed</button>
+        <button class="disc-filter-btn" :class="{ active: mgtFilter === 'unmanaged' }" @click="mgtFilter='unmanaged'">Unmanaged</button>
+      </div>
+
+      {# Source filter #}
+      <div style="display:flex; gap:0.25rem;">
+        <button class="disc-filter-btn" :class="{ active: srcFilter === 'all' }"   @click="srcFilter='all'">All</button>
+        <button class="disc-filter-btn" :class="{ active: srcFilter === 'cf' }"    @click="srcFilter='cf'">CF</button>
+        <button class="disc-filter-btn" :class="{ active: srcFilter === 'unifi' }" @click="srcFilter='unifi'">UniFi</button>
+        <button class="disc-filter-btn" :class="{ active: srcFilter === 'k8s' }"   @click="srcFilter='k8s'">K8s</button>
+      </div>
+
+      {# Active integrations indicators #}
+      {% if unifi_enabled %}
+      <span style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.75rem; color:#64748b;">
+        <span style="width:8px; height:8px; border-radius:50%; background:#7c3aed; display:inline-block;"></span>
+        UniFi
+      </span>
+      {% endif %}
+      {% if k8s_enabled %}
+      <span style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.75rem; color:#64748b;">
+        <span style="width:8px; height:8px; border-radius:50%; background:#16a34a; display:inline-block;"></span>
+        K8s
+      </span>
+      {% endif %}
+
+      {# Sync Now #}
+      <button id="sync-now-btn"
+              hx-post="/api/trigger-sync"
+              hx-target="#sync-now-status"
+              hx-swap="innerHTML"
+              hx-indicator="#sync-now-btn"
+              hx-on:htmx:before-request="this.disabled=true; this.textContent='Syncing…'"
+              hx-on:htmx:after-request="this.disabled=false; this.textContent='Sync Now'"
+              class="btn btn-primary btn-sm" style="font-size:0.8rem;">
+        Sync Now
+      </button>
+      <span id="sync-now-status" style="font-size:0.8rem; color:#64748b;"></span>
+    </div>
+  </div>
+
+  {# Per-source error banners #}
+  {% if zone_records_error %}
+  <div style="padding:0.5rem 1.25rem; background:#fef3c7; border-bottom:1px solid #fde68a; color:#92400e; font-size:0.8rem;">
+    &#9888; Cloudflare: {{ zone_records_error }}
+  </div>
+  {% endif %}
+  {% if k8s_error %}
+  <div style="padding:0.5rem 1.25rem; background:#fef3c7; border-bottom:1px solid #fde68a; color:#92400e; font-size:0.8rem;">
+    &#9888; Kubernetes: {{ k8s_error }}
+  </div>
+  {% endif %}
+
+  <div class="discovery-grid">
+
+  {# -------------------------------------------------------------------
+     MANAGED cards — looped from `records` (full config + stats data).
+     Colour coding per the worst sync state across all active services:
+       green  = all active services synced
+       yellow = any IP mismatch / pending
+       red    = any failure logged
+       slate  = no services enabled (inactive)
+  ------------------------------------------------------------------- #}
+  {% for r in records %}
+  {%- set slug = r.name | replace('.', '-') | replace('_', '-') -%}
+  {%- set srcs = [] -%}
+  {%- if r.cfg_cf_enabled                                  %}{%- set srcs = srcs + ['cf']    %}{%- endif -%}
+  {%- if r.cfg_unifi_enabled or r.cfg_unifi_local_enabled  %}{%- set srcs = srcs + ['unifi'] %}{%- endif -%}
+  {%- if r.k8s_namespace                                   %}{%- set srcs = srcs + ['k8s']   %}{%- endif -%}
+
+  {%- set ns = namespace(err=false, warn=false, active=false) -%}
+  {%- if r.cfg_cf_enabled -%}
+    {%- set ns.active = true -%}
+    {%- if r.failures > 0 and r.is_up_to_date is not none and not r.is_up_to_date -%}
+      {%- set ns.err = true -%}
+    {%- elif r.is_up_to_date is none or not r.is_up_to_date -%}
+      {%- set ns.warn = true -%}
+    {%- endif -%}
+  {%- endif -%}
+  {%- if r.cfg_unifi_enabled -%}
+    {%- set ns.active = true -%}
+    {%- set _ut = r.cfg_unifi_static_ip or unifi_default_ip or '' -%}
+    {%- if not r.unifi_ip or r.unifi_ip != _ut -%}{%- set ns.warn = true -%}{%- endif -%}
+  {%- endif -%}
+  {%- if r.cfg_unifi_local_enabled -%}
+    {%- set ns.active = true -%}
+    {%- set _lt = r.cfg_unifi_local_static_ip or r.cfg_unifi_static_ip or unifi_default_ip or '' -%}
+    {%- if not r.unifi_local_ip or r.unifi_local_ip != _lt -%}{%- set ns.warn = true -%}{%- endif -%}
+  {%- endif -%}
+
+  {%- if ns.err    -%}{%- set cbg='#fef2f2' -%}{%- set cborder='#dc2626' -%}{%- set clabel='#dc2626' -%}
+  {%- elif ns.warn -%}{%- set cbg='#fffbeb' -%}{%- set cborder='#f59e0b' -%}{%- set clabel='#d97706' -%}
+  {%- elif ns.active-%}{%- set cbg='#f0fdf4' -%}{%- set cborder='#16a34a' -%}{%- set clabel='#16a34a' -%}
+  {%- else         -%}{%- set cbg='#f8fafc' -%}{%- set cborder='#94a3b8' -%}{%- set clabel='#94a3b8' -%}
+  {%- endif -%}
+
+  <div class="discovery-card"
+       data-name="{{ r.name | lower }}"
+       data-sources="{{ srcs | join(' ') }}"
+       data-managed="true"
+       x-data="{ expanded: false, menu: false }"
+       x-show="matches($el)"
+       style="background:{{ cbg }}; border:2px solid {{ cborder }}; border-radius:0.5rem;
+              box-shadow:0 1px 4px rgba(0,0,0,0.04); transition:box-shadow 0.15s;"
+       onmouseenter="this.style.boxShadow='0 2px 10px rgba(0,0,0,0.1)'"
+       onmouseleave="this.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'">
+
+    <div style="padding:0.75rem 0.85rem 0.85rem; display:flex; flex-direction:column; gap:0.4rem; position:relative;">
+
+      {# MANAGED label + dot-menu — toggle switch handles add/remove; ⋯ menu for configure only #}
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:0.45rem;">
+          <form hx-post="/remove-from-managed" hx-swap="none"
+                hx-confirm="Remove {{ r.name }} from managed? DNS record stays in Cloudflare.">
+            <input type="hidden" name="record_name" value="{{ r.name }}">
+            <button type="submit" class="card-toggle card-toggle-on" title="Remove from managed"></button>
+          </form>
+          <span style="font-size:0.67rem; font-weight:700; text-transform:uppercase;
+                       letter-spacing:0.07em; color:{{ clabel }};">&#10003; Managed</span>
+        </div>
+        <div class="card-menu-anchor" @click.outside="menu = false">
+          <button type="button" @click.stop="menu = !menu" class="btn-dots" title="Actions">&#8943;</button>
+          <div x-show="menu" x-cloak class="card-menu" style="top:calc(100% + 4px); right:0;">
+            <button type="button" class="card-menu-item"
+                    @click="expanded = true; menu = false">&#9881;&hairsp; Configure</button>
+          </div>
+        </div>
+      </div>
+
+      {# Sync-status badges #}
+      <div class="discovery-card-top" style="margin-top:0.1rem;">
+        {% if r.cfg_cf_enabled %}
+          {% if r.is_up_to_date is none %}
+            <span class="badge badge-cf" style="opacity:0.6;">CF unknown</span>
+          {% elif r.is_up_to_date %}
+            <span class="badge badge-cf">&#10003; CF synced</span>
+          {% else %}
+            <span class="badge badge-cf" style="opacity:0.75;">&#8593; CF pending</span>
+          {% endif %}
+        {% endif %}
+        {% if r.cfg_unifi_enabled or r.cfg_unifi_local_enabled %}
+          {%- set _ut = r.cfg_unifi_static_ip or unifi_default_ip or '' -%}
+          {% if r.unifi_ip and r.unifi_ip == _ut %}
+            <span class="badge badge-unifi">&#10003; UniFi synced</span>
+          {% elif r.unifi_ip %}
+            <span class="badge badge-unifi" style="opacity:0.75;">&#8593; UniFi pending</span>
+          {% else %}
+            <span class="badge badge-unifi" style="opacity:0.6;">UniFi pending</span>
+          {% endif %}
+        {% endif %}
+        {% if not r.cfg_cf_enabled and not r.cfg_unifi_enabled and not r.cfg_unifi_local_enabled %}
+          <span class="badge badge-neutral" style="color:#94a3b8;">Inactive</span>
+        {% endif %}
+      </div>
+
+      {# Hostname #}
+      <div class="discovery-card-name font-mono" title="{{ r.name }}">{{ r.name }}</div>
+
+      {# IP rows #}
+      <div style="display:flex; flex-direction:column; gap:0.15rem;">
+        {% if r.cfg_cf_enabled %}
+        <div class="dc-ip-row">
+          <span class="dc-ip-label dc-ip-label-cf">CF</span>
+          <span class="font-mono">{{ r.dns_ip or '—' }}</span>
+        </div>
+        {% endif %}
+        {% if unifi_enabled and (r.unifi_ip or r.cfg_unifi_enabled) %}
+        <div class="dc-ip-row">
+          <span class="dc-ip-label dc-ip-label-unifi">UniFi</span>
+          <span class="font-mono">{{ r.unifi_ip or '—' }}</span>
+        </div>
+        {% endif %}
+        {% if unifi_enabled and (r.unifi_local_ip or r.cfg_unifi_local_enabled) %}
+        <div class="dc-ip-row">
+          <span class="dc-ip-label dc-ip-label-unifi">.local</span>
+          <span class="font-mono">{{ r.unifi_local_ip or '—' }}</span>
+        </div>
+        {% endif %}
+        {% if r.k8s_namespace %}
+        <div class="dc-ip-row">
+          <span class="dc-ip-label dc-ip-label-k8s">K8s</span>
+          <span style="font-size:0.78rem; color:#475569;">{{ r.k8s_namespace }}/{{ r.k8s_ingress_name }}</span>
+        </div>
+        {% endif %}
+      </div>
+
+      {# Stats: updates · failures · last-checked #}
+      <div style="font-size:0.78rem; color:#64748b; line-height:1.5;">
+        {{ r.updates }} update{{ 's' if r.updates != 1 else '' }}
+        <form hx-post="/reset-updates" hx-swap="none" style="display:inline;">
+          <input type="hidden" name="record_name" value="{{ r.name }}">
+          <button type="submit" class="btn-clear-failures" title="Reset update counter">&#x2715;</button>
+        </form>
+        &middot;
+        {% if r.failures > 0 %}
+          <button type="button" class="btn-failures-toggle"
+                  hx-get="/api/logs/record/{{ r.name }}"
+                  hx-target="#record-errors-{{ slug }}"
+                  hx-swap="innerHTML"
+                  onclick="toggleErrorLog('{{ slug }}')"
+                  title="Click to see error log">
+            <span style="color:#dc2626;">{{ r.failures }} failure{{ 's' if r.failures != 1 else '' }}</span>
+            <span style="font-size:0.65rem;">&#9660;</span>
+          </button>
+        {% else %}0 failures{% endif %}
+        {% if r.last_checked %}<br><span style="color:#94a3b8;">{{ r.last_checked[:16] }}</span>{% endif %}
+      </div>
+
+    </div>{# end managed card body #}
+
+    {# Inline error log panel #}
+    <div class="record-error-panel" id="record-errors-{{ slug }}" style="display:none;"></div>
+
+    {# Configure modal — teleported to <body> so it overlays the whole page #}
+    <template x-teleport="body">
+      <div x-show="expanded" x-cloak
+           class="modal-overlay"
+           @keydown.escape.window="expanded = false">
+        <div style="position:absolute; inset:0; background:rgba(15,23,42,0.45);" @click="expanded = false"></div>
+        <div style="position:relative; z-index:1; background:#fff; border-radius:0.75rem;
+                    box-shadow:0 20px 60px rgba(0,0,0,0.25); width:min(520px,95vw);
+                    max-height:88vh; overflow-y:auto; border-left:4px solid {{ cborder }};">
+          <div style="display:flex; align-items:center; justify-content:space-between;
+                      padding:0.85rem 1.25rem; border-bottom:1px solid #f1f5f9;
+                      position:sticky; top:0; background:#fff; z-index:1;">
+            <span style="font-weight:700; color:#1e293b; font-size:0.95rem;">&#9881; {{ r.name }}</span>
+            <button type="button" @click="expanded = false"
+                    style="background:none; border:none; cursor:pointer; font-size:1.35rem; color:#94a3b8;
+                           line-height:1; padding:0.1rem 0.45rem; border-radius:0.375rem; transition:background 0.1s;"
+                    onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background=''">&times;</button>
+          </div>
+          <div style="padding:1.25rem;"
+               x-data="{
+                 cfOn:     {{ 'true' if r.cfg_cf_enabled else 'false' }},
+                 staticOn: {{ 'true' if r.cfg_ip_mode == 'static' else 'false' }},
+                 unifiOn:  {{ 'true' if (r.cfg_unifi_enabled or r.cfg_unifi_local_enabled) else 'false' }},
+                 parentOn: {{ 'true' if r.cfg_unifi_enabled else 'false' }},
+                 localOn:  {{ 'true' if r.cfg_unifi_local_enabled else 'false' }},
+                 toggleUnifiMaster(v) {
+                   this.unifiOn = v;
+                   if (!v) { this.parentOn = false; this.localOn = false; }
+                 },
+                 toggleParent(v) { this.parentOn = v; if (v) this.unifiOn = true; },
+                 toggleLocal(v)  { this.localOn  = v; if (v) this.unifiOn = true; }
+               }">
+            <form id="cfg-form-{{ slug }}"
+                  hx-post="/update-record-config"
+                  hx-target="#cfg-status-{{ slug }}"
+                  hx-swap="innerHTML"
+                  hx-trigger="change, input delay:800ms from:[name=static_ip], input delay:800ms from:[name=unifi_static_ip], input delay:800ms from:[name=unifi_local_static_ip]">
+              <input type="hidden" name="record_name" value="{{ r.name }}">
+              <div class="row-config-sections">
+
+                {# Cloudflare DDNS section #}
+                <div class="row-config-section">
+                  <label class="record-cfg-toggle">
+                    <input type="checkbox" name="cf_enabled" value="on"
+                           {% if r.cfg_cf_enabled %}checked{% endif %}
+                           @change="cfOn = $event.target.checked">
+                    <span style="font-weight:600; color:#0284c7;">Cloudflare DDNS</span>
+                  </label>
+                  <div :style="cfOn ? '' : 'opacity:0.4; pointer-events:none;'"
+                       style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.4rem; margin-top:0.4rem;">
+                    <div style="display:flex; gap:1rem;">
+                      <label class="record-cfg-radio">
+                        <input type="radio" name="ip_mode" value="dynamic"
+                               {% if r.cfg_ip_mode != 'static' %}checked{% endif %}
+                               @change="staticOn = false">
+                        <span>Dynamic <span class="text-muted" style="font-size:0.75rem;">(auto-detect)</span></span>
+                      </label>
+                      <label class="record-cfg-radio">
+                        <input type="radio" name="ip_mode" value="static"
+                               {% if r.cfg_ip_mode == 'static' %}checked{% endif %}
+                               @change="staticOn = true">
+                        <span>Static</span>
+                      </label>
+                    </div>
+                    <div x-show="staticOn" style="display:flex; align-items:center; gap:0.5rem;">
+                      <label style="font-size:0.8rem; color:#475569; white-space:nowrap; width:70px;">IP Address</label>
+                      <input type="text" name="static_ip" value="{{ r.cfg_static_ip }}" placeholder="203.0.113.1"
+                             style="width:160px; font-size:0.8125rem; padding:0.3rem 0.6rem; border:1px solid #cbd5e1; border-radius:0.375rem;">
+                    </div>
+                  </div>
+                </div>
+
+                {% if unifi_enabled %}
+                {# UniFi DNS section #}
+                <div class="row-config-section">
+                  <label class="record-cfg-toggle">
+                    <input type="checkbox"
+                           :checked="unifiOn"
+                           @change="toggleUnifiMaster($event.target.checked)">
+                    <span style="font-weight:600; color:#7c3aed;">UniFi DNS</span>
+                  </label>
+                  <div :style="unifiOn ? '' : 'opacity:0.4; pointer-events:none;'"
+                       style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.5rem; margin-top:0.4rem;">
+                    <label class="record-cfg-toggle">
+                      <input type="checkbox" name="unifi_enabled" value="on"
+                             :checked="parentOn"
+                             @change="toggleParent($event.target.checked)">
+                      <span style="font-size:0.875rem; color:#7c3aed;">Enable parent record</span>
+                    </label>
+                    <div x-show="parentOn" style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.35rem;">
+                      <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <label style="font-size:0.8rem; color:#475569; white-space:nowrap; width:70px;">IP Address</label>
+                        <input type="text" name="unifi_static_ip"
+                               value="{{ r.cfg_unifi_static_ip or unifi_default_ip or '' }}"
+                               placeholder="e.g. 172.20.0.10"
+                               style="width:160px; font-size:0.8125rem; padding:0.3rem 0.6rem; border:1px solid #cbd5e1; border-radius:0.375rem;">
+                      </div>
+                      <span class="text-muted" style="font-size:0.75rem;">
+                        {% if r.unifi_ip %}Synced: <span class="font-mono">{{ r.unifi_ip }}</span>
+                        {% else %}Will create policy on next check{% endif %}
+                      </span>
+                    </div>
+                    <label class="record-cfg-toggle">
+                      <input type="checkbox" name="unifi_local_enabled" value="on"
+                             :checked="localOn"
+                             @change="toggleLocal($event.target.checked)">
+                      <span style="font-size:0.875rem; color:#7c3aed;">Enable .local record</span>
+                    </label>
+                    <div x-show="localOn" style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.35rem;">
+                      <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <label style="font-size:0.8rem; color:#475569; white-space:nowrap; width:70px;">.local IP</label>
+                        <input type="text" name="unifi_local_static_ip"
+                               value="{{ r.cfg_unifi_local_static_ip or r.cfg_unifi_static_ip or unifi_default_ip or '' }}"
+                               placeholder="e.g. 172.20.0.10"
+                               style="width:160px; font-size:0.8125rem; padding:0.3rem 0.6rem; border:1px solid #cbd5e1; border-radius:0.375rem;">
+                      </div>
+                      <span class="text-muted" style="font-size:0.75rem;">
+                        {% if r.unifi_local_ip %}Local synced: <span class="font-mono">{{ r.unifi_local_ip }}</span>
+                        {% else %}Will create &lt;host&gt;.local on next check{% endif %}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {% endif %}
+
+              </div>{# end .row-config-sections #}
+              <div class="cfg-status-row">
+                <span id="cfg-status-{{ slug }}" class="text-sm text-muted"></span>
+              </div>
+            </form>
+          </div>{# end modal body / x-data #}
+        </div>{# end modal panel #}
+      </div>{# end modal overlay #}
+    </template>
+
+  </div>{# end managed card #}
+  {% endfor %}{# end managed loop #}
+
+  {# -------------------------------------------------------------------
+     UNMANAGED cards — looped from discovery_records, skipping any
+     already in managed_names.  Clicking the card body triggers an
+     HTMX POST to /add-to-managed (with a browser confirm prompt).
+     The ⋯ dot-menu only exposes destructive delete actions.
+  ------------------------------------------------------------------- #}
+  {% for r in discovery_records %}
+  {% if r.name not in managed_names %}
+  {%- set srcs = [] -%}
+  {%- if r.cf_ip is not none                                    %}{%- set srcs = srcs + ['cf']    %}{%- endif -%}
+  {%- if r.unifi_ip is not none or r.unifi_local_ip is not none %}{%- set srcs = srcs + ['unifi'] %}{%- endif -%}
+  {%- if r.k8s_namespace is not none                            %}{%- set srcs = srcs + ['k8s']   %}{%- endif -%}
+
+  <div class="discovery-card"
+       data-name="{{ r.name | lower }}"
+       data-sources="{{ srcs | join(' ') }}"
+       data-managed="false"
+       x-data="{ menu: false }"
+       x-show="matches($el)"
+       style="background:#fff; border:1px solid #e2e8f0; border-radius:0.5rem;
+              box-shadow:0 1px 4px rgba(0,0,0,0.04); transition:box-shadow 0.15s, border-color 0.15s;"
+       onmouseenter="this.style.boxShadow='0 2px 10px rgba(0,0,0,0.08)'; this.style.borderColor='#94a3b8';"
+       onmouseleave="this.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'; this.style.borderColor='#e2e8f0';">
+
+    <div style="padding:0.75rem 0.85rem 0.85rem; display:flex; flex-direction:column; gap:0.4rem; position:relative;">
+
+      {# UNMANAGED label + dot-menu — toggle switch handles add-to-managed #}
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:0.45rem;">
+          <form hx-post="/add-to-managed" hx-swap="none"
+                hx-vals='{"record_name": "{{ r.name }}"{% if r.local_only %}, "init_unifi_local": "true"{% endif %}}'
+                hx-confirm="Add &#39;{{ r.name }}&#39; to managed?">
+            <button type="submit" class="card-toggle card-toggle-off" title="Add to managed"></button>
+          </form>
+          <span style="font-size:0.67rem; font-weight:700; text-transform:uppercase;
+                       letter-spacing:0.07em; color:#94a3b8;">Unmanaged</span>
+        </div>
+        <div class="card-menu-anchor" @click.outside="menu = false">
+          <button type="button" @click.stop="menu = !menu" class="btn-dots" title="Actions">&#8943;</button>
+          <div x-show="menu" x-cloak class="card-menu" style="top:calc(100% + 4px); right:0;">
+            {% if r.cf_record_id %}
+            <form hx-post="/delete-record"
+                  hx-swap="none"
+                  hx-confirm="Delete {{ r.name }} from Cloudflare? This cannot be undone.">
+              <input type="hidden" name="record_id" value="{{ r.cf_record_id }}">
+              <input type="hidden" name="record_name" value="{{ r.name }}">
+              <button type="submit" class="card-menu-item card-menu-item-danger">Delete CF</button>
+            </form>
+            {% endif %}
+            {% if r.unifi_record_id %}
+            <form hx-post="/delete-unifi-record"
+                  hx-swap="none"
+                  hx-confirm="Delete UniFi policy for {{ r.name }}? This cannot be undone.">
+              <input type="hidden" name="record_id" value="{{ r.unifi_record_id }}">
+              <input type="hidden" name="record_name" value="{{ r.name }}">
+              <button type="submit" class="card-menu-item card-menu-item-danger">Delete UniFi</button>
+            </form>
+            {% endif %}
+            {% if r.unifi_local_record_id %}
+            <form hx-post="/delete-unifi-record"
+                  hx-swap="none"
+                  hx-confirm="Delete UniFi .local policy for {{ r.name }}? This cannot be undone.">
+              <input type="hidden" name="record_id" value="{{ r.unifi_local_record_id }}">
+              <input type="hidden" name="record_name" value="{{ r.name }}.local">
+              <button type="submit" class="card-menu-item card-menu-item-danger">Delete UniFi.local</button>
+            </form>
+            {% endif %}
+            {% if not r.cf_record_id and not r.unifi_record_id and not r.unifi_local_record_id %}
+            <span class="card-menu-item" style="color:#94a3b8; cursor:default; font-style:italic;">No actions</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {# Source badges #}
+      <div class="discovery-card-top" style="margin-top:0.1rem;">
+        {% if r.cf_ip is not none %}<span class="badge badge-cf" style="font-size:0.7rem;">CF</span>{% endif %}
+        {% if r.unifi_ip is not none or r.unifi_local_ip is not none %}<span class="badge badge-unifi" style="font-size:0.7rem;">UniFi</span>{% endif %}
+        {% if r.k8s_namespace is not none %}<span class="badge badge-k8s" style="font-size:0.7rem;">K8s</span>{% endif %}
+      </div>
+
+      {# Hostname #}
+      <div class="discovery-card-name font-mono" title="{{ r.name }}">{{ r.name }}</div>
+
+      {# IPs #}
+      <div style="display:flex; flex-direction:column; gap:0.3rem; margin-top:0.1rem;">
+        {% if r.cf_ip is not none %}
+        <div class="dc-ip-row">
+          <span class="dc-ip-label dc-ip-label-cf">CF</span>
+          <span class="font-mono">{{ r.cf_ip }}</span>
+        </div>
+        {% endif %}
+        {% if r.unifi_ip is not none %}
+        <div class="dc-ip-row">
+          <span class="dc-ip-label dc-ip-label-unifi">UniFi</span>
+          <span class="font-mono">{{ r.unifi_ip }}</span>
+        </div>
+        {% endif %}
+        {% if r.unifi_local_ip is not none %}
+        <div class="dc-ip-row">
+          <span class="dc-ip-label dc-ip-label-unifi">.local</span>
+          <span class="font-mono">{{ r.unifi_local_ip }}</span>
+        </div>
+        {% endif %}
+        {% if r.k8s_namespace is not none %}
+        <div class="dc-ip-row">
+          <span class="dc-ip-label dc-ip-label-k8s">K8s</span>
+          <span style="font-size:0.78rem; color:#475569;">{{ r.k8s_namespace }}/{{ r.k8s_ingress_name }}</span>
+        </div>
+        {% endif %}
+      </div>
+
+    </div>{# end unmanaged card body #}
+  </div>{# end unmanaged card #}
+  {% endif %}
+  {% endfor %}{# end discovery loop #}
+
+  </div>{# end discovery-grid #}
+</div>{# end unified card #}
+
+{# Hidden SSE listener — triggers location.reload() when records_updated fires #}
+<div id="sse-reload" sse-swap="records_updated" hx-swap="none" style="display:none;"></div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
+// Close any open HTMX SSE EventSource connections before reloading so the
+// browser doesn't fire a spurious error event when the stream is cut mid-flight.
+// The SSE extension stores the EventSource in htmx.getInternalData(el).sseEventSource.
+function closeSseConnections() {
+  try {
+    document.querySelectorAll('[sse-connect]').forEach(function(el) {
+      var src = htmx.getInternalData(el).sseEventSource;
+      if (src) { src.close(); }
+    });
+  } catch(e) {}
+}
+
+// beforeunload fires at the start of navigation — closing here ensures the
+// EventSource is already CLOSED before the browser aborts the connection,
+// which prevents the "interrupted while page was loading" console error.
+window.addEventListener('beforeunload', closeSseConnections);
+
+function safeReload() {
+  closeSseConnections();
+  location.reload();
+}
+
+// Reload the page after any successful write action so the unified grid
+// reflects current state.  Config saves (/update-record-config) are excluded
+// because they show inline feedback in the modal instead.
+document.addEventListener('htmx:afterRequest', function(evt) {
+  if (!evt.detail.successful) return;
+  const path = (evt.detail.requestConfig && evt.detail.requestConfig.path) || '';
+  const reloadPaths = [
+    '/add-to-managed', '/remove-from-managed', '/create-record',
+    '/delete-record',   '/delete-unifi-record',  '/reset-updates',
+  ];
+  if (reloadPaths.some(p => path === p || path.startsWith(p + '?'))) {
+    safeReload();
+  }
+});
+
+// Reload when an SSE records_updated event fires (after a scheduled sync cycle).
+document.body.addEventListener('htmx:sseMessage', function(evt) {
+  if (evt.detail && evt.detail.type === 'records_updated') {
+    safeReload();
+  }
+});
+
 function toggleRowConfig(slug) {
-  // NOTE: Kept as no-op shim; individual record rows now use Alpine x-data={expanded}
-  // to manage expand/collapse state. This stub prevents errors from any cached pages.
-}
-
-function toggleCfSection(slug, enabled) {
-  var s = document.getElementById('cf-section-' + slug);
-  if (s) {
-    s.style.opacity = enabled ? '' : '0.4';
-    s.style.pointerEvents = enabled ? '' : 'none';
-  }
-}
-
-function toggleStaticIp(slug, show) {
-  var w = document.getElementById('static-ip-wrap-' + slug);
-  if (w) { w.style.visibility = show ? 'visible' : 'hidden'; }
-}
-
-function toggleUnifiMaster(slug, enabled) {
-  var detail = document.getElementById('unifi-detail-' + slug);
-  if (detail) {
-    detail.style.opacity = enabled ? '' : '0.4';
-    detail.style.pointerEvents = enabled ? '' : 'none';
-  }
-  if (!enabled) {
-    // Uncheck both sub-boxes and collapse their detail sections
-    var parentCb = document.getElementById('unifi-parent-cb-' + slug);
-    var localCb  = document.getElementById('unifi-local-cb-'  + slug);
-    if (parentCb && parentCb.checked) { parentCb.checked = false; toggleUnifiParent(slug, false); parentCb.dispatchEvent(new Event('change', {bubbles:true})); }
-    if (localCb  && localCb.checked)  { localCb.checked  = false; toggleUnifiLocal(slug,  false); localCb.dispatchEvent(new Event('change', {bubbles:true})); }
-  }
-}
-
-function toggleUnifiParent(slug, enabled) {
-  var d = document.getElementById('unifi-parent-detail-' + slug);
-  if (d) { d.style.display = enabled ? 'flex' : 'none'; }
-  // Keep master in sync: if enabling a sub-box, ensure master is checked
-  if (enabled) {
-    var master = document.getElementById('unifi-master-' + slug);
-    if (master) master.checked = true;
-  }
-}
-
-function toggleUnifiSection(slug, enabled) {
-  // Legacy shim — kept so any residual callers don't break
-  toggleUnifiParent(slug, enabled);
-}
-
-function toggleUnifiLocal(slug, enabled) {
-  var d = document.getElementById('unifi-local-detail-' + slug);
-  if (d) { d.style.display = enabled ? 'flex' : 'none'; }
-  // Keep master in sync
-  if (enabled) {
-    var master = document.getElementById('unifi-master-' + slug);
-    if (master) master.checked = true;
-  }
+  // No-op shim — kept so any cached markup referencing this function does not error.
 }
 
 (function () {
@@ -368,7 +664,7 @@ function toggleUnifiLocal(slug, enabled) {
     timer = setInterval(tick, 1000);
   }
 
-  // Show placeholder until the fetch resolves so the user never sees a stale full-interval flash.
+  // Show placeholder until the fetch resolves.
   el.textContent = '…';
   fetch('/api/next-check-in')
     .then(r => r.json())
@@ -377,3 +673,5 @@ function toggleUnifiLocal(slug, enabled) {
 }());
 </script>
 {% endblock %}
+
+
