@@ -29,9 +29,10 @@ A self-hosted Dynamic DNS dashboard. Monitors your host machine's public IP addr
 - **Read-only** — never modifies cluster state; discovery only
 
 ### Dashboard & UI
-- **Dark nav / light card layout** — built with FastAPI + Jinja2 + HTMX; no page reloads, no JavaScript framework
-- **Stat cards** — live counters: managed records, total updates, total failures, check interval, next-check countdown
-- **Live log viewer** — per-update audit log stored in SQLite, auto-refreshes every 5 seconds
+- **Unified discovery grid** — all DNS records (managed and unmanaged) shown in a single card grid; toggle switch per card to add/remove from managed
+- **Dark nav / light card layout** — built with FastAPI + Jinja2 + HTMX + Alpine.js; partial updates via SSE, no full page reloads
+- **Stat cards** — managed record count, check interval, next-check countdown
+- **Live log viewer** — per-update audit log stored in SQLite, pushed in real time via Server-Sent Events
 - **Status indicators** — per-record badges showing current DNS IP vs. detected IP, UniFi sync status, and K8s discovery status
 - **Provider active dots** — header indicators show when UniFi and Kubernetes integrations are live
 - **Error banners** — inline alerts for Cloudflare API errors and UniFi API errors with a direct link to Settings
@@ -179,9 +180,9 @@ Every interval the scheduler runs two sequential passes:
 1. **Cloudflare DDNS pass** — for each record with Cloudflare enabled, fetches the current public IP (or uses the configured static IP) and updates the A-record if the IP has changed.
 2. **UniFi sync pass** — for each record:
    - UniFi enabled → create the DNS policy if it doesn't exist, or update it if the IP has changed
-  - Optional `.local` enabled → create/update `<host>.local` using its IP override/fallback chain
+   - Optional `.local` enabled → create/update `<host>.local` using its IP override/fallback chain
    - UniFi disabled → delete the DNS policy from the controller if one exists
-  - Optional `.local` disabled → delete the `<host>.local` policy if one exists
+   - Optional `.local` disabled → delete the `<host>.local` policy if one exists
    - Skipped entirely when the global UniFi toggle is off or credentials are absent
 
 ---
@@ -191,11 +192,15 @@ Every interval the scheduler runs two sequential passes:
 | Layer | Choice |
 |---|---|
 | Language | Python 3.12 |
-| Web framework | FastAPI |
-| Templates | Jinja2 + HTMX |
+| Web framework | FastAPI + Uvicorn |
+| Templates | Jinja2 + HTMX + Alpine.js |
+| Server-Sent Events | sse-starlette |
 | HTTP client | httpx (async) |
 | Scheduler | APScheduler (`AsyncIOScheduler`) |
+| File watcher | watchdog |
+| DNS parsing | tldextract |
 | Database | SQLite via SQLModel |
+| Kubernetes | kubernetes Python client |
 | Container | python:3.12-slim |
 
 ---
