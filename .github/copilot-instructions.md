@@ -576,7 +576,7 @@ All four locations must always be updated together. Missing any one will cause a
 | `shared_templates.py` | `APP_VERSION = "vX.Y.Z"` | String value |
 | `app.py` | `FastAPI(version="X.Y.Z", ...)` | Numeric string (no leading `v`) |
 
-Current version: **v2.1.0**
+Current version: **v2.1.1**
 
 Release order is mandatory:
 1. Update `README.md` for the new version and changes.
@@ -666,7 +666,7 @@ Every check cycle performs two sequential passes:
 
 | Field | Default | Meaning |
 |---|---|---|
-| `cf_enabled` | `True` | Include record in Cloudflare DDNS cycle |
+| `cf_enabled` | `False` | Include record in Cloudflare DDNS cycle |
 | `ip_mode` | `"dynamic"` | `"dynamic"` = auto-detect public IP; `"static"` = use `static_ip` |
 | `static_ip` | `""` | Fixed external IP (used when `ip_mode="static"`) |
 | `unifi_enabled` | `False` | Manage a UniFi DNS policy for this record |

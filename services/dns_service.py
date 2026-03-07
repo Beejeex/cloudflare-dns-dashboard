@@ -128,6 +128,14 @@ class DnsService:
             # Skip CF update entirely if the user has disabled Cloudflare for this record
             if cfg is not None and not cfg.cf_enabled:
                 logger.debug("Cloudflare DDNS disabled for %s — skipping.", record_name)
+                # Auto-clear any stale failures that accumulated while CF was enabled.
+                prior_stats = await self._stats.get_for_record(record_name)
+                if prior_stats and prior_stats.failures > 0:
+                    await self._stats.reset_failures(record_name)
+                    self._log.log(
+                        f"Cloudflare: {record_name} — stale failure(s) cleared (CF disabled).",
+                        level="INFO",
+                    )
                 skipped_count += 1
                 continue
 

@@ -163,7 +163,7 @@ Each managed record has independent controls accessible from the dashboard:
 
 | Setting | Default | Description |
 |---|---|---|
-| **Cloudflare DDNS** | `on` | Include this record in the DDNS update cycle |
+| **Cloudflare DDNS** | `off` | Include this record in the DDNS update cycle |
 | **IP Mode** | `dynamic` | `dynamic` = auto-detect public IP; `static` = use a fixed IP |
 | **Static IP** | — | Fixed external IP (used when IP mode is `static`) |
 | **UniFi DNS** | `off` | Create and maintain a UniFi DNS policy for this record |
@@ -211,7 +211,7 @@ Images are published to GitHub Container Registry:
 
 ```
 ghcr.io/beejeex/cloudflare-dns-dashboard:latest      # most recent release
-ghcr.io/beejeex/cloudflare-dns-dashboard:v2.1.0      # pinned release
+ghcr.io/beejeex/cloudflare-dns-dashboard:v2.1.1      # pinned release
 ```
 
 ---
@@ -222,7 +222,8 @@ ghcr.io/beejeex/cloudflare-dns-dashboard:v2.1.0      # pinned release
 |---|---|
 | `v1.x` | Legacy Flask app — archived |
 | `v2.0.x` | FastAPI rewrite; UniFi + Kubernetes integration; expandable record panels; discovery grid; multi-service badges |
-| `v2.1.0` | **Current** — Unified discovery grid, toggle switches, SSE-driven updates, Alpine.js, custom confirm modal, UniFi single-fetch sync |
+| `v2.1.0` | Unified discovery grid, toggle switches, SSE-driven updates, Alpine.js, custom confirm modal, UniFi single-fetch sync |
+| `v2.1.1` | **Current** — All per-record settings default to off; new records require explicit opt-in |
 
 This is **beta software**. The database schema may change between minor versions. Pin to a specific image tag in production.
 

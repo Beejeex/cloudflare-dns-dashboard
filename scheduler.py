@@ -395,7 +395,7 @@ async def _ddns_check_job(
                     "unifi_ip": None,
                     "unifi_local_ip": None,
                     "unifi_record_id": None,
-                    "cfg_cf_enabled": _bcast_cfgs.get(r).cf_enabled if _bcast_cfgs.get(r) else True,
+                    "cfg_cf_enabled": _bcast_cfgs.get(r).cf_enabled if _bcast_cfgs.get(r) else False,
                     "cfg_ip_mode": _bcast_cfgs.get(r).ip_mode if _bcast_cfgs.get(r) else "dynamic",
                     "cfg_static_ip": _bcast_cfgs.get(r).static_ip if _bcast_cfgs.get(r) else "",
                     "cfg_unifi_enabled": _bcast_cfgs.get(r).unifi_enabled if _bcast_cfgs.get(r) else False,
