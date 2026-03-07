@@ -216,13 +216,8 @@ ghcr.io/beejeex/cloudflare-dns-dashboard:v2.1.0      # pinned release
 | Version | Status |
 |---|---|
 | `v1.x` | Legacy Flask app — archived |
-| `v2.0.13` | FastAPI rewrite with UniFi + Kubernetes integration |
-| `v2.0.17` | Dashboard live-refresh; expandable per-record config panels |
-| `v2.0.24` | UniFi `.local` discovery; per-record 3-checkbox UniFi panel |
-| `v2.0.25` | Sync Now button; zone-based FQDN reconstruction for orphaned `.local` policies |
-| `v2.0.27` | Discovery search + filter bar; multi-service badges |
-| `v2.0.28` | Per-service badge colors; K8s Ingress shown in managed rows |
-| `v2.1.0` | **Current** — Unified discovery grid, toggle switches, custom confirm modal, SSE-driven updates, Alpine.js interactivity, UniFi single-fetch sync |
+| `v2.0.x` | FastAPI rewrite; UniFi + Kubernetes integration; expandable record panels; discovery grid; multi-service badges |
+| `v2.1.0` | **Current** — Unified discovery grid, toggle switches, SSE-driven updates, Alpine.js, custom confirm modal, UniFi single-fetch sync |
 
 This is **beta software**. The database schema may change between minor versions. Pin to a specific image tag in production.
 
