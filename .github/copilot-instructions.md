@@ -626,7 +626,7 @@ The visual design follows the same system used in `beejeex/madtracked`. Do not d
 
 ### Components
 - **Badges**: inline-block, `border-radius: 999px`, `font-size: 0.75rem`, `font-weight: 600`. Classes: `.badge-ok`, `.badge-warning`, `.badge-error`, `.badge-unifi` (violet), `.badge-k8s` (green).
-- **Unified discovery grid**: `display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem` — one card per hostname across both managed and unmanaged records. Toggle switch on each card (green = managed, gray = unmanaged) posts to `/remove-from-managed` or `/add-to-managed` respectively.
+- **Unified discovery grid**: `display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem` — one card per hostname across both managed and unmanaged records. Toggle switch on each card: managed toggle posts to `/remove-from-managed`; unmanaged toggle opens a config modal (Alpine `addModal: true`) which posts to `/add-to-managed-configured` — never directly to `/add-to-managed`.
 - **Managed record cards**: green border, toggle ON. Per-record expandable config panel includes Cloudflare DDNS checkbox (dynamic/static IP mode) and UniFi DNS checkbox. UniFi section shows IP Address input (prefilled from `unifi_default_ip`) only when UniFi is checked.
 - **Stat cards**: CSS grid using `.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }`. Value in `2rem 700` weight.
 - **Tables**: `font-size: 0.875rem`, `th` uppercase + `letter-spacing: 0.05em`, row hover `#f8fafc`.
@@ -639,7 +639,8 @@ All styles live in `templates/base.html` `<style>` block. Do not add Tailwind, B
 ### HTMX patterns in templates
 - Log tail: `hx-get="/api/logs/recent" hx-trigger="load, sse:log_appended" hx-swap="innerHTML"` — SSE push replaces timer polling; no `every Ns` trigger.
 - Destructive actions: always include `hx-confirm="..."` attribute. The global `htmx:confirm` handler in `base.html` shows a custom modal — guard it with `if (!evt.detail.question) return` because HTMX v1 fires the event for **every** request, not only confirmed ones.
-- Dashboard write actions (`/add-to-managed`, `/remove-from-managed`, etc.) use `hx-swap="none"` and rely on a JS `safeReload()` call in `htmx:afterRequest` to refresh the unified grid. Partial fragment swaps are not used here because the grid reorders cards.
+- Dashboard write actions (`/add-to-managed-configured`, `/remove-from-managed`, `/create-record`, etc.) trigger a JS `safeReload()` call in `htmx:afterRequest` to refresh the unified grid. These routes return `HTMLResponse("")` on success — no fragment is swapped in. The `reloadPaths` list in `dashboard.html` enumerates every path that should trigger the reload.
+- `/create-record` is a special case: it returns `HTMLResponse("")` on **success** (triggering `safeReload`) but returns a plain error `<div class="alert-error">` fragment on **failure** (swapped into `#create-record-status` so the error is shown inline without a reload). Never return a full table fragment from `/create-record`.
 - `safeReload()` must close the SSE `EventSource` via `htmx.getInternalData(el).sseEventSource.close()` before calling `location.reload()` to avoid a spurious browser error event.
 - Loading indicators: `<span class="htmx-indicator">loading…</span>` with `.htmx-indicator { opacity:0; transition: opacity 0.15s; }` and `.htmx-request.htmx-indicator { opacity:1; }`.
 - Partial swaps target the narrowest possible element — never `hx-target="body"` except for full-page resets.

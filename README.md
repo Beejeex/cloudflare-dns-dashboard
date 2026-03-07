@@ -221,12 +221,9 @@ ghcr.io/beejeex/cloudflare-dns-dashboard:v2.1.4      # pinned release
 | Version | Status |
 |---|---|
 | `v1.x` | Legacy Flask app — archived |
-| `v2.0.x` | FastAPI rewrite; UniFi + Kubernetes integration; expandable record panels; discovery grid; multi-service badges |
-| `v2.1.0` | Unified discovery grid, toggle switches, SSE-driven updates, Alpine.js, custom confirm modal, UniFi single-fetch sync |
-| `v2.1.1` | All per-record settings default to off; new records require explicit opt-in |
-| `v2.1.2` | Auto-create Cloudflare A-record when not found in zone |
-| `v2.1.3` | Config modal on unmanaged toggle; per-record settings pre-filled from detected IPs |
-| `v2.1.4` | **Current** — Fix /create-record: returns empty response on success; no flash of embedded table |
+| `v2.0.x` | FastAPI rewrite; UniFi + Kubernetes integration; discovery grid; multi-service badges |
+| `v2.1.x` | Unified grid, SSE, Alpine.js, per-record config modal, auto-create CF records, all settings default off |
+| `v2.1.4` | **Current** |
 
 This is **beta software**. The database schema may change between minor versions. Pin to a specific image tag in production.
 
