@@ -239,6 +239,75 @@ async def add_to_managed(
     )
 
 
+@router.post("/add-to-managed-configured", response_class=HTMLResponse)
+async def add_to_managed_configured(
+    request: Request,
+    record_name: str = Form(...),
+    cf_enabled: str = Form(default="off"),
+    ip_mode: str = Form(default="dynamic"),
+    static_ip: str = Form(default=""),
+    unifi_enabled: str = Form(default="off"),
+    unifi_static_ip: str = Form(default=""),
+    unifi_local_enabled: str = Form(default="off"),
+    unifi_local_static_ip: str = Form(default=""),
+    init_unifi_local: str = Form(default=""),
+    config_service: ConfigService = Depends(get_config_service),
+    log_service: LogService = Depends(get_log_service),
+    record_config_repo: RecordConfigRepository = Depends(get_record_config_repo),
+) -> HTMLResponse:
+    """
+    Adds a DNS record to managed and saves its initial config in one atomic step.
+
+    Called from the unmanaged-card config modal so the user can configure
+    CF/UniFi settings before the record enters the DDNS cycle.
+
+    Args:
+        request: The incoming FastAPI request.
+        record_name: The FQDN to add, e.g. "home.example.com".
+        cf_enabled: "on" when the Cloudflare checkbox is checked.
+        ip_mode: "dynamic" or "static".
+        static_ip: Fixed IP used when ip_mode is "static".
+        unifi_enabled: "on" when the UniFi parent-record checkbox is checked.
+        unifi_static_ip: IP for the primary UniFi DNS policy.
+        unifi_local_enabled: "on" when the .local policy checkbox is checked.
+        unifi_local_static_ip: Optional IP override for the .local policy.
+        init_unifi_local: Legacy flag; when "true" forces unifi_local_enabled on.
+        config_service: Mutates the managed-records list.
+        log_service: Writes UI log entries.
+        record_config_repo: Persists the initial RecordConfig.
+
+    Returns:
+        An empty HTMLResponse (SSE broadcast triggers page reload).
+    """
+    await config_service.add_managed_record(record_name)
+    log_service.log(f"Added '{record_name}' to managed records.", level="INFO")
+
+    cfg = record_config_repo.get(record_name)
+    cfg.cf_enabled = cf_enabled == "on"
+    cfg.ip_mode = ip_mode if ip_mode in ("dynamic", "static") else "dynamic"
+    cfg.static_ip = static_ip.strip()
+    cfg.unifi_enabled = unifi_enabled == "on"
+    cfg.unifi_static_ip = unifi_static_ip.strip()
+    # NOTE: init_unifi_local handles the legacy .local-only discovery path.
+    cfg.unifi_local_enabled = (unifi_local_enabled == "on") or (init_unifi_local == "true")
+    cfg.unifi_local_static_ip = unifi_local_static_ip.strip()
+    record_config_repo.save(cfg)
+
+    log_service.log(
+        f"Initial config for '{record_name}': cf={cfg.cf_enabled} "
+        f"mode={cfg.ip_mode} unifi={cfg.unifi_enabled} "
+        f"unifi_local={cfg.unifi_local_enabled}",
+        level="INFO",
+    )
+
+    broadcaster = getattr(request.app.state, "broadcaster", None)
+    if broadcaster is not None:
+        broadcaster.publish("records_updated", "")
+        broadcaster.publish("log_appended", "{}")
+
+    return HTMLResponse("")
+
+
 @router.post("/remove-from-managed", response_class=HTMLResponse)
 async def remove_from_managed(
     request: Request,

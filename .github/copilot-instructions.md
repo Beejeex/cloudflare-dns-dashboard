@@ -576,7 +576,7 @@ All four locations must always be updated together. Missing any one will cause a
 | `shared_templates.py` | `APP_VERSION = "vX.Y.Z"` | String value |
 | `app.py` | `FastAPI(version="X.Y.Z", ...)` | Numeric string (no leading `v`) |
 
-Current version: **v2.1.2**
+Current version: **v2.1.3**
 
 Release order is mandatory:
 1. Update `README.md` for the new version and changes.
