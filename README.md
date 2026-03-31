@@ -1,5 +1,7 @@
 # Cloudflare DNS Dashboard
 
+[![License: CC BY-NC-ND 4.0](https://img.shields.io/badge/License-CC%20BY--NC--ND%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+
 > ⚠️ **Beta Software** — This project is in active development. Expect breaking changes between versions. Use in production at your own risk.
 
 A self-hosted Dynamic DNS dashboard. Monitors your host machine's public IP address and automatically updates Cloudflare DNS A-records when it changes. Optionally manages internal DNS policies on a UniFi Network controller and discovers service hostnames from Kubernetes Ingress resources — all from a single Docker container with no external dependencies.
@@ -236,4 +238,4 @@ Known limitations:
 
 ## License
 
-CC BY-NC-SA 4.0 — Free for personal/non-commercial use; modifications must be shared under the same license. See [LICENSE](LICENSE) file.
+CC BY-NC-ND 4.0 — Free for personal/non-commercial use; no derivatives or modified distributions permitted. See [LICENSE](LICENSE) file.
