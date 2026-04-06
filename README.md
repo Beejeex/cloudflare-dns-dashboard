@@ -213,7 +213,7 @@ Images are published to GitHub Container Registry:
 
 ```
 ghcr.io/beejeex/cloudflare-dns-dashboard:latest      # most recent release
-ghcr.io/beejeex/cloudflare-dns-dashboard:v2.1.4      # pinned release
+ghcr.io/beejeex/cloudflare-dns-dashboard:v2.1.5      # pinned release
 ```
 
 ---
@@ -225,7 +225,8 @@ ghcr.io/beejeex/cloudflare-dns-dashboard:v2.1.4      # pinned release
 | `v1.x` | Legacy Flask app — archived |
 | `v2.0.x` | FastAPI rewrite; UniFi + Kubernetes integration; discovery grid; multi-service badges |
 | `v2.1.x` | Unified grid, SSE, Alpine.js, per-record config modal, auto-create CF records, all settings default off |
-| `v2.1.4` | **Current** |
+| `v2.1.4` | UniFi/local policy independence; remove master UniFi toggle |
+| `v2.1.5` | **Current** |
 
 This is **beta software**. The database schema may change between minor versions. Pin to a specific image tag in production.
 

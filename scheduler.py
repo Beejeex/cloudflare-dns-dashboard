@@ -163,7 +163,11 @@ async def _ddns_check_job(
             for record_name in records:
                 cfg = record_configs.get(record_name)
 
-                # --- Deletion pass: remove policy when user disables UniFi for this record ---
+                # ----------------------------------------------------------------
+                # Main domain policy — controlled solely by cfg.unifi_enabled.
+                # NOTE: This is fully independent of the .local policy below;
+                # either can be managed without the other.
+                # ----------------------------------------------------------------
                 if cfg is None or not cfg.unifi_enabled:
                     try:
                         existing = existing_policies.get(record_name)
@@ -181,83 +185,65 @@ async def _ddns_check_job(
                         )
                         logger.error("UniFi policy removal failed for %s: %s", record_name, exc)
                         unifi_failed += 1
-
-                    # Also remove derived .local policy when UniFi is disabled.
-                    local_record_name = _to_local_policy_name(record_name)
-                    if local_record_name != record_name:
+                else:
+                    # Determine target IP: per-record static → global default
+                    target_ip = (
+                        cfg.unifi_static_ip.strip()
+                        or config.unifi_default_ip.strip()
+                    )
+                    if not target_ip:
+                        log_service.log(
+                            f"UniFi: skipped '{record_name}' — no IP configured.",
+                            level="WARNING",
+                        )
+                        unifi_failed += 1
+                    else:
                         try:
-                            existing_local = existing_policies.get(local_record_name)
-                            if existing_local is not None:
-                                await unifi_client.delete_record(config.unifi_site_id, existing_local.id)
+                            existing = existing_policies.get(record_name)
+                            if existing is None:
+                                await unifi_client.create_record(config.unifi_site_id, record_name, target_ip)
                                 log_service.log(
-                                    f"UniFi: removed local policy '{local_record_name}' (disabled by user).",
+                                    f"UniFi: created policy '{record_name}' → {target_ip} ✓",
                                     level="INFO",
                                 )
-                                unifi_deleted += 1
+                                unifi_created += 1
+                            elif existing.content != target_ip:
+                                await unifi_client.update_record(config.unifi_site_id, existing, target_ip)
+                                log_service.log(
+                                    f"UniFi: updated policy '{record_name}' → {target_ip} ✓",
+                                    level="INFO",
+                                )
+                                unifi_updated += 1
+                            else:
+                                logger.debug("UniFi policy '%s' already up to date (%s).", record_name, target_ip)
+                                log_service.log(
+                                    f"UniFi: '{record_name}' already in sync ({target_ip}).",
+                                    level="INFO",
+                                )
+                                unifi_unchanged += 1
+                            # NOTE: Stamp last_checked so CF-disabled records always show
+                            # a timestamp on the dashboard, not just CF-enabled ones.
+                            stats_repo.record_check(record_name)
                         except UnifiProviderError as exc:
                             log_service.log(
-                                f"UniFi: failed to remove local policy '{local_record_name}' — {exc}",
+                                f"UniFi: failed to sync '{record_name}' — {exc}",
                                 level="ERROR",
                             )
-                            logger.error("UniFi local policy removal failed for %s: %s", local_record_name, exc)
+                            logger.error("UniFi sync failed for %s: %s", record_name, exc)
                             unifi_failed += 1
-                    continue
 
-                # Determine target IP: per-record static → global default
-                target_ip = (
-                    cfg.unifi_static_ip.strip()
-                    or config.unifi_default_ip.strip()
-                )
-                if not target_ip:
-                    log_service.log(
-                        f"UniFi: skipped '{record_name}' — no IP configured.",
-                        level="WARNING",
-                    )
-                    unifi_failed += 1
-                    continue
-
-                try:
-                    existing = existing_policies.get(record_name)
-                    if existing is None:
-                        await unifi_client.create_record(config.unifi_site_id, record_name, target_ip)
-                        log_service.log(
-                            f"UniFi: created policy '{record_name}' → {target_ip} ✓",
-                            level="INFO",
-                        )
-                        unifi_created += 1
-                    elif existing.content != target_ip:
-                        await unifi_client.update_record(config.unifi_site_id, existing, target_ip)
-                        log_service.log(
-                            f"UniFi: updated policy '{record_name}' → {target_ip} ✓",
-                            level="INFO",
-                        )
-                        unifi_updated += 1
-                    else:
-                        logger.debug("UniFi policy '%s' already up to date (%s).", record_name, target_ip)
-                        log_service.log(
-                            f"UniFi: '{record_name}' already in sync ({target_ip}).",
-                            level="INFO",
-                        )
-                        unifi_unchanged += 1
-                    # NOTE: Stamp last_checked so CF-disabled records always show
-                    # a timestamp on the dashboard, not just CF-enabled ones.
-                    stats_repo.record_check(record_name)
-                except UnifiProviderError as exc:
-                    log_service.log(
-                        f"UniFi: failed to sync '{record_name}' — {exc}",
-                        level="ERROR",
-                    )
-                    logger.error("UniFi sync failed for %s: %s", record_name, exc)
-                    unifi_failed += 1
-
-                # --- Optional .local sync pass for this record ---
+                # ----------------------------------------------------------------
+                # .local policy — controlled solely by cfg.unifi_local_enabled.
+                # NOTE: Independent of unifi_enabled — a .local-only setup
+                # (unifi_enabled=False + unifi_local_enabled=True) is valid.
+                # If the managed record itself is already *.local there is no
+                # separate secondary name to manage.
+                # ----------------------------------------------------------------
                 local_record_name = _to_local_policy_name(record_name)
-                # NOTE: If the managed record itself is already *.local there is
-                # no separate secondary name to manage.
                 if local_record_name == record_name:
                     continue
 
-                if not cfg.unifi_local_enabled:
+                if cfg is None or not cfg.unifi_local_enabled:
                     try:
                         existing_local = existing_policies.get(local_record_name)
                         if existing_local is not None:
@@ -274,50 +260,52 @@ async def _ddns_check_job(
                         )
                         logger.error("UniFi local policy removal failed for %s: %s", local_record_name, exc)
                         unifi_failed += 1
-                    continue
-
-                local_target_ip = (
-                    cfg.unifi_local_static_ip.strip()
-                    or cfg.unifi_static_ip.strip()
-                    or config.unifi_default_ip.strip()
-                )
-                if not local_target_ip:
-                    log_service.log(
-                        f"UniFi: skipped local policy '{local_record_name}' — no IP configured.",
-                        level="WARNING",
+                else:
+                    local_target_ip = (
+                        cfg.unifi_local_static_ip.strip()
+                        or cfg.unifi_static_ip.strip()
+                        or config.unifi_default_ip.strip()
                     )
-                    unifi_failed += 1
-                    continue
-
-                try:
-                    existing_local = existing_policies.get(local_record_name)
-                    if existing_local is None:
-                        await unifi_client.create_record(config.unifi_site_id, local_record_name, local_target_ip)
+                    if not local_target_ip:
                         log_service.log(
-                            f"UniFi: created local policy '{local_record_name}' → {local_target_ip} ✓",
-                            level="INFO",
+                            f"UniFi: skipped local policy '{local_record_name}' — no IP configured.",
+                            level="WARNING",
                         )
-                        unifi_created += 1
-                    elif existing_local.content != local_target_ip:
-                        await unifi_client.update_record(config.unifi_site_id, existing_local, local_target_ip)
-                        log_service.log(
-                            f"UniFi: updated local policy '{local_record_name}' → {local_target_ip} ✓",
-                            level="INFO",
-                        )
-                        unifi_updated += 1
+                        unifi_failed += 1
                     else:
-                        log_service.log(
-                            f"UniFi: local '{local_record_name}' already in sync ({local_target_ip}).",
-                            level="INFO",
-                        )
-                        unifi_unchanged += 1
-                except UnifiProviderError as exc:
-                    log_service.log(
-                        f"UniFi: failed to sync local '{local_record_name}' — {exc}",
-                        level="ERROR",
-                    )
-                    logger.error("UniFi local sync failed for %s: %s", local_record_name, exc)
-                    unifi_failed += 1
+                        try:
+                            existing_local = existing_policies.get(local_record_name)
+                            if existing_local is None:
+                                await unifi_client.create_record(config.unifi_site_id, local_record_name, local_target_ip)
+                                log_service.log(
+                                    f"UniFi: created local policy '{local_record_name}' → {local_target_ip} ✓",
+                                    level="INFO",
+                                )
+                                unifi_created += 1
+                            elif existing_local.content != local_target_ip:
+                                await unifi_client.update_record(config.unifi_site_id, existing_local, local_target_ip)
+                                log_service.log(
+                                    f"UniFi: updated local policy '{local_record_name}' → {local_target_ip} ✓",
+                                    level="INFO",
+                                )
+                                unifi_updated += 1
+                            else:
+                                log_service.log(
+                                    f"UniFi: local '{local_record_name}' already in sync ({local_target_ip}).",
+                                    level="INFO",
+                                )
+                                unifi_unchanged += 1
+                            # NOTE: Stamp last_checked for .local-only records so
+                            # the dashboard shows a timestamp even when the parent
+                            # policy is disabled.
+                            stats_repo.record_check(record_name)
+                        except UnifiProviderError as exc:
+                            log_service.log(
+                                f"UniFi: failed to sync local '{local_record_name}' — {exc}",
+                                level="ERROR",
+                            )
+                            logger.error("UniFi local sync failed for %s: %s", local_record_name, exc)
+                            unifi_failed += 1
 
             # Summary log for the UniFi pass
             summary_parts: list[str] = []

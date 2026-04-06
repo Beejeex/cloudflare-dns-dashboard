@@ -152,7 +152,7 @@ def create_app() -> FastAPI:
     application = FastAPI(
         title="Cloudflare DDNS Dashboard",
         description="Monitors public IP and updates Cloudflare DNS A-records automatically.",
-        version="2.1.4",
+        version="2.1.5",
         lifespan=lifespan,
     )
 

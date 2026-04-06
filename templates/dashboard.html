@@ -354,15 +354,8 @@
                x-data="{
                  cfOn:     {{ 'true' if r.cfg_cf_enabled else 'false' }},
                  staticOn: {{ 'true' if r.cfg_ip_mode == 'static' else 'false' }},
-                 unifiOn:  {{ 'true' if (r.cfg_unifi_enabled or r.cfg_unifi_local_enabled) else 'false' }},
                  parentOn: {{ 'true' if r.cfg_unifi_enabled else 'false' }},
-                 localOn:  {{ 'true' if r.cfg_unifi_local_enabled else 'false' }},
-                 toggleUnifiMaster(v) {
-                   this.unifiOn = v;
-                   if (!v) { this.parentOn = false; this.localOn = false; }
-                 },
-                 toggleParent(v) { this.parentOn = v; if (v) this.unifiOn = true; },
-                 toggleLocal(v)  { this.localOn  = v; if (v) this.unifiOn = true; }
+                 localOn:  {{ 'true' if r.cfg_unifi_local_enabled else 'false' }}
                }">
             <form id="cfg-form-{{ slug }}"
                   hx-post="/update-record-config"
@@ -407,18 +400,12 @@
                 {% if unifi_enabled %}
                 {# UniFi DNS section #}
                 <div class="row-config-section">
-                  <label class="record-cfg-toggle">
-                    <input type="checkbox"
-                           :checked="unifiOn"
-                           @change="toggleUnifiMaster($event.target.checked)">
-                    <span style="font-weight:600; color:#7c3aed;">UniFi DNS</span>
-                  </label>
-                  <div :style="unifiOn ? '' : 'opacity:0.4; pointer-events:none;'"
-                       style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.5rem; margin-top:0.4rem;">
+                  <span style="font-weight:600; color:#7c3aed;">UniFi DNS</span>
+                  <div style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.5rem; margin-top:0.4rem;">
                     <label class="record-cfg-toggle">
                       <input type="checkbox" name="unifi_enabled" value="on"
                              :checked="parentOn"
-                             @change="toggleParent($event.target.checked)">
+                             @change="parentOn = $event.target.checked">
                       <span style="font-size:0.875rem; color:#7c3aed;">Enable parent record</span>
                     </label>
                     <div x-show="parentOn" style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.35rem;">
@@ -437,7 +424,7 @@
                     <label class="record-cfg-toggle">
                       <input type="checkbox" name="unifi_local_enabled" value="on"
                              :checked="localOn"
-                             @change="toggleLocal($event.target.checked)">
+                             @change="localOn = $event.target.checked">
                       <span style="font-size:0.875rem; color:#7c3aed;">Enable .local record</span>
                     </label>
                     <div x-show="localOn" style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.35rem;">
@@ -606,21 +593,8 @@
              x-data="{
                cfOn:     false,
                staticOn: false,
-               unifiOn:  {{ 'true' if r.local_only else 'false' }},
                parentOn: false,
-               localOn:  {{ 'true' if r.local_only else 'false' }},
-               toggleUnifiMaster(v) {
-                 this.unifiOn = v;
-                 if (!v) { this.parentOn = false; this.localOn = false; }
-               },
-               toggleParent(v) {
-                 this.parentOn = v;
-                 if (v) this.unifiOn = true;
-               },
-               toggleLocal(v) {
-                 this.localOn = v;
-                 if (v) this.unifiOn = true;
-               }
+               localOn:  {{ 'true' if r.local_only else 'false' }}
              }">
 
           {# Detected IPs info strip #}
@@ -674,18 +648,12 @@
               {% if unifi_enabled %}
               {# UniFi DNS section #}
               <div class="row-config-section">
-                <label class="record-cfg-toggle">
-                  <input type="checkbox"
-                         :checked="unifiOn"
-                         @change="toggleUnifiMaster($event.target.checked)">
-                  <span style="font-weight:600; color:#7c3aed;">UniFi DNS</span>
-                </label>
-                <div :style="unifiOn ? '' : 'opacity:0.4; pointer-events:none;'"
-                     style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.5rem; margin-top:0.4rem;">
+                <span style="font-weight:600; color:#7c3aed;">UniFi DNS</span>
+                <div style="padding-left:1.3rem; display:flex; flex-direction:column; gap:0.5rem; margin-top:0.4rem;">
                   <label class="record-cfg-toggle">
                     <input type="checkbox" name="unifi_enabled" value="on"
                            :checked="parentOn"
-                           @change="toggleParent($event.target.checked)">
+                           @change="parentOn = $event.target.checked">
                     <span style="font-size:0.875rem; color:#7c3aed;">Enable parent record</span>
                   </label>
                   <div x-show="parentOn"
@@ -699,7 +667,7 @@
                   <label class="record-cfg-toggle">
                     <input type="checkbox" name="unifi_local_enabled" value="on"
                            :checked="localOn"
-                           @change="toggleLocal($event.target.checked)">
+                           @change="localOn = $event.target.checked">
                     <span style="font-size:0.875rem; color:#7c3aed;">Enable .local record</span>
                   </label>
                   <div x-show="localOn"
